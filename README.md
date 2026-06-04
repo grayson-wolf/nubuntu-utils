@@ -110,7 +110,6 @@ excuses libsdl3 | where package =~ "freerdp"
 | `cpbd` | Clear parent build directory of old artifacts |
 | `tarme` | Fetch the orig tarball for the current package |
 | `getdeps` | Install build dependencies via mk-build-deps |
-| `ppa-name` | Generate a deterministic PPA name from package state |
 | `test-urls` | Generate autopkgtest request URLs for the current PPA upload |
 | `buildin` | Build binary packages in a clean LXD container |
 

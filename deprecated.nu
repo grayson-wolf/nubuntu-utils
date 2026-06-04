@@ -19,6 +19,12 @@ export def --env gp [
     }
 }
 
+# Legacy wrapper for `p name`
+export def "ppa-name" []: nothing -> string {
+    print $"(ansi yellow_bold)⚠ `ppa-name` is deprecated, use `p name` instead(ansi reset)"
+    p name
+}
+
 # Legacy wrapper for `p build`
 export def --wrapped ppa-build [
     --proposed (-p)
