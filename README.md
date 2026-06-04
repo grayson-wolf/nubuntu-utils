@@ -74,7 +74,7 @@ excuses libsdl3 | where package =~ "freerdp"
 | Variable | Default | Description |
 |---|---|---|
 | `NUBUNTU_PKGS_DIR` | `~/pkgs` | Directory where packages are cloned |
-| `NUBUNTU_COOKIE_PATH` | `~/.cache/autopkgtest.cookie` | Path to autopkgtest session cookie |
+| `NUBUNTU_CACHE_DIR` | `~/.cache/nubuntu-utils` | Cache directory (cookie, team mapping, etc.) |
 | `QUILT_PATCHES` | `debian/patches` | Quilt patches directory |
 | `EDITOR` | — | Editor used by `qedit` and other interactive commands |
 

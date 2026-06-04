@@ -63,7 +63,7 @@ export def up [
     ppa wait $ppa_path
 
     # Auto-submit autopkgtest requests via cookie
-    let cookie = ($env.NUBUNTU_COOKIE_PATH? | default "~/.cache/autopkgtest.cookie" | path expand)
+    let cookie = ([$env.NUBUNTU_CACHE_DIR "autopkgtest.cookie"] | path join | path expand)
     let notify_text = if ($cookie | path exists) {
         let urls = (test-urls)
         let results = ($urls | par-each {|entry|

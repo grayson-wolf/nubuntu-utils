@@ -5,13 +5,12 @@ use build.nu [test-urls]
 use ../completions.nu [release-completions, ppa-completions, normalize-ppa-name]
 use ../ubuntu-versions.nu [DEVEL_RELEASE]
 
-const DEFAULT_COOKIE_PATH = "~/.cache/autopkgtest.cookie"
 const EXCUSES_URL = "https://ubuntu-archive-team.ubuntu.com/proposed-migration"
 
 # Validate and return the expanded autopkgtest cookie path.
 # Errors with setup instructions if the cookie file is missing.
 export def autopkgtest-cookie []: nothing -> string {
-    let cookie = ($env.NUBUNTU_COOKIE_PATH? | default $DEFAULT_COOKIE_PATH | path expand)
+    let cookie = ([$env.NUBUNTU_CACHE_DIR "autopkgtest.cookie"] | path join | path expand)
     if not ($cookie | path exists) {
         error make { msg: $"Autopkgtest cookie not found at ($cookie). Export your autopkgtest.ubuntu.com session cookie to this file." }
     }
@@ -149,25 +148,25 @@ def parse-excuses-entry [entry: string]: nothing -> record {
 # With --rev, scans all entries to find packages whose migration depends on this package
 # (slow — parses many YAML entries, but pre-filters and parallelizes).
 #
-# Requires an autopkgtest.ubuntu.com session cookie at $NUBUNTU_COOKIE_PATH
-# (default: ~/.cache/autopkgtest.cookie). To create it, export your browser's
+# Requires an autopkgtest.ubuntu.com session cookie at $NUBUNTU_CACHE_DIR/autopkgtest.cookie
+# (default: ~/.cache/nubuntu-utils/autopkgtest.cookie). To create it, export your browser's
 # session and SRVNAME cookies:
 #
 #   # bash:
-#   printf "autopkgtest.ubuntu.com\tTRUE\t/\tTRUE\t0\tsession\tVALUE\n" > ~/.cache/autopkgtest.cookie
-#   printf "autopkgtest.ubuntu.com\tTRUE\t/\tTRUE\t0\tSRVNAME\tVALUE\n" >> ~/.cache/autopkgtest.cookie
+#   printf "autopkgtest.ubuntu.com\tTRUE\t/\tTRUE\t0\tsession\tVALUE\n" > ~/.cache/nubuntu-utils/autopkgtest.cookie
+#   printf "autopkgtest.ubuntu.com\tTRUE\t/\tTRUE\t0\tSRVNAME\tVALUE\n" >> ~/.cache/nubuntu-utils/autopkgtest.cookie
 #
 #   # nushell:
-#   "autopkgtest.ubuntu.com\tTRUE\t/\tTRUE\t0\tsession\tVALUE\n" | save ~/.cache/autopkgtest.cookie
-#   "autopkgtest.ubuntu.com\tTRUE\t/\tTRUE\t0\tSRVNAME\tVALUE\n" | save --append ~/.cache/autopkgtest.cookie
+#   "autopkgtest.ubuntu.com\tTRUE\t/\tTRUE\t0\tsession\tVALUE\n" | save $"($env.NUBUNTU_CACHE_DIR)/autopkgtest.cookie"
+#   "autopkgtest.ubuntu.com\tTRUE\t/\tTRUE\t0\tSRVNAME\tVALUE\n" | save --append $"($env.NUBUNTU_CACHE_DIR)/autopkgtest.cookie"
 #
 # Or, if you have an API key:
 #
 #   # bash:
-#   printf "autopkgtest.ubuntu.com\tTRUE\t/\tTRUE\t0\tX-Api-Key\tuser:KEY\n" > ~/.cache/autopkgtest.cookie
+#   printf "autopkgtest.ubuntu.com\tTRUE\t/\tTRUE\t0\tX-Api-Key\tuser:KEY\n" > ~/.cache/nubuntu-utils/autopkgtest.cookie
 #
 #   # nushell:
-#   "autopkgtest.ubuntu.com\tTRUE\t/\tTRUE\t0\tX-Api-Key\tuser:KEY\n" | save ~/.cache/autopkgtest.cookie
+#   "autopkgtest.ubuntu.com\tTRUE\t/\tTRUE\t0\tX-Api-Key\tuser:KEY\n" | save $"($env.NUBUNTU_CACHE_DIR)/autopkgtest.cookie"
 #
 # The cookie is valid for one month.
 export def retry-regressions [

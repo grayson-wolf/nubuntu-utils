@@ -60,7 +60,7 @@ export def --env pkg [
 export def poc [
   package: string # The package to check
 ]: nothing -> list<string> {
-  let cache_file = ("~/.cache/package-team-mapping.nuon" | path expand)
+  let cache_file = ([$env.NUBUNTU_CACHE_DIR "package-team-mapping.nuon"] | path join)
   let max_age = 1day
 
   # Use cached file if fresh enough

@@ -99,4 +99,4 @@ apps:
 
 environment:
   NUBUNTU_PKGS_DIR: $HOME/pkgs
-  NUBUNTU_COOKIE_PATH: $HOME/.cache/autopkgtest.cookie
+  NUBUNTU_CACHE_DIR: $HOME/.cache/nubuntu-utils
