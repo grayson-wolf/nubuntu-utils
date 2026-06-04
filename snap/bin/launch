@@ -1,0 +1,5 @@
+#!/bin/bash
+# Launcher for nubuntu-utils snap commands.
+# Routes to the appropriate .nu wrapper script with nushell.
+cmd="$1"; shift
+exec "$SNAP/bin/nu" --include-path "$SNAP" "$SNAP/wrappers/$cmd.nu" "$@"

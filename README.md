@@ -1,0 +1,164 @@
+# nubuntu-utils
+
+Ubuntu packaging workflow commands powered by [Nushell](https://www.nushell.sh/).
+Works from any shell (bash, zsh, fish) via snap, with full native pipeline support for Nushell users.
+
+## Installation
+
+### Install dependencies
+
+```bash
+# APT packages
+sudo apt install devscripts ubuntu-dev-tools dput-ng quilt autopkgtest git gh zenity
+
+# Snaps
+sudo snap install ppa-dev-tools --edge
+sudo snap install git-ubuntu --edge --classic
+sudo snap install lxd --channel=latest/candidate
+```
+
+### Install the snap
+
+```bash
+sudo snap install nubuntu-utils --classic
+```
+
+### Set up command aliases (non-Nushell users)
+
+By default, commands are namespaced (e.g. `nubuntu-utils.excuses`). To use short names like `excuses`, `p`, `pkg`, etc., run the interactive alias manager:
+
+```bash
+nubuntu-utils.aliases
+```
+
+This lets you pick which commands to expose as short aliases (requires sudo).
+
+### Configure environment
+
+Add to your `~/.bashrc` (or equivalent):
+
+```bash
+export LAUNCHPAD_NAME="your-lp-username"
+export DEBFULLNAME="Your Name"
+export DEBEMAIL="you@example.com"
+export DEBSIGN_KEYID="YOUR_GPG_KEY_ID"
+```
+
+### (Nushell users) Source the commands directly
+
+Instead of using the snap wrappers, source the modules natively for full pipeline support:
+
+```nu
+# In your config.nu:
+source /snap/nubuntu-utils/current/nubuntu-utils/env.nu
+use /snap/nubuntu-utils/current/nubuntu-utils/ *
+```
+
+This gives you structured table output, filtering, and all Nushell features:
+
+```nu
+excuses libsdl3 | where package =~ "freerdp"
+```
+
+## Required Environment Variables
+
+| Variable | Description | Example |
+|---|---|---|
+| `LAUNCHPAD_NAME` | Your Launchpad username (used for PPA paths and git remotes) | `your-lp-username` |
+| `DEBFULLNAME` | Your full name for debian/changelog entries | `Your Name` |
+| `DEBEMAIL` | Your email for debian/changelog entries | `you@example.com` |
+| `DEBSIGN_KEYID` | GPG key ID for signing packages | `YOUR_GPG_KEY_ID` |
+
+## Optional Environment Variables
+
+| Variable | Default | Description |
+|---|---|---|
+| `NUBUNTU_PKGS_DIR` | `~/pkgs` | Directory where packages are cloned |
+| `NUBUNTU_COOKIE_PATH` | `~/.cache/autopkgtest.cookie` | Path to autopkgtest session cookie |
+| `QUILT_PATCHES` | `debian/patches` | Quilt patches directory |
+| `EDITOR` | — | Editor used by `qedit` and other interactive commands |
+
+## Commands
+
+### PPA Lifecycle (`p` subcommands)
+
+| Command | Description |
+|---|---|
+| `p` | Show available PPA subcommands |
+| `p build` | Clean, fetch orig tarball, build source package, and upload to a fresh PPA |
+| `p up` | Create PPA, dput, wait for build, auto-submit tests, notify, show status |
+| `p reap` | Destroy all PPAs whose name matches a package substring |
+| `p destroy` | Destroy a single PPA by name |
+| `p test` | Submit autopkgtest trigger requests for a PPA (local or named) |
+| `p tests` | Display autopkgtest result summaries for a named PPA |
+| `p name` | Print the deterministic PPA name for the current package |
+| `p sync` | Branch from debian/sid and test a sync via PPA build |
+
+### Package Workspace
+
+| Command | Description |
+|---|---|
+| `pkg` | Clone a package (or cd into it if already cloned) |
+| `dch-bump` | Bump changelog version and commit with update-maintainer |
+| `poc` | Check which team(s) own a package |
+| `revdeps` | List reverse dependencies of a package |
+
+### Building
+
+| Command | Description |
+|---|---|
+| `cpbd` | Clear parent build directory of old artifacts |
+| `tarme` | Fetch the orig tarball for the current package |
+| `getdeps` | Install build dependencies via mk-build-deps |
+| `ppa-name` | Generate a deterministic PPA name from package state |
+| `test-urls` | Generate autopkgtest request URLs for the current PPA upload |
+| `buildin` | Build binary packages in a clean LXD container |
+
+### Testing & Migration
+
+| Command | Description |
+|---|---|
+| `excuses` | Show proposed-migration status with a colorized autopkgtest table |
+| `retry-regressions` | Retry autopkgtest regressions blocking (or blocked by) a package |
+| `testin` | Run autopkgtests in a local LXD container |
+| `testurl` | Display clickable autopkgtest request URLs for the current package |
+
+### Patches (`q` subcommands)
+
+| Command | Description |
+|---|---|
+| `q` | Show available quilt subcommands |
+| `q push` | Apply all patches (with --fuzz=0) |
+| `q pop` | Unapply all patches |
+| `q ref` | Refresh current patch with git-style headers |
+| `q add` | Register a file for the current patch |
+| `q header` | Edit DEP-3 patch header interactively |
+| `q series` | Show the patch series |
+| `q top` | Show the topmost applied patch |
+| `q new` | Create a new auto-numbered quilt patch |
+| `q edit` | Register file, open in editor, refresh (add→edit→refresh cycle) |
+| `q diff` | Generate an upstream-ready patch diff from the packaging branch |
+
+### Dependency Analysis
+
+| Command | Description |
+|---|---|
+| `dep-components` | Show which archive components a package's dependencies live in |
+
+### Git / Launchpad
+
+| Command | Description |
+|---|---|
+| `lppush` | Push to your Launchpad fork with optional merge-tag support |
+| `withgit` | Run an external command with `GITHUB_TOKEN` exposed |
+| `withgit-do` | Run a nushell closure with `GITHUB_TOKEN` exposed |
+
+### LXD Containers
+
+| Command | Description |
+|---|---|
+| `spawn` | Launch an LXD container/VM and enter a shell |
+| `ephemeral` | Spawn a temporary container that self-destructs on exit |
+| `lxc-reap` | Stop and delete a single container |
+| `lxc-reap-all` | Reap all orphaned ephemeral containers |
+| `images` | List images from a given LXD remote as a nushell table |

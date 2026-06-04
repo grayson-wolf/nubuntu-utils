@@ -1,0 +1,102 @@
+name: nubuntu-utils
+version: "0.1.0"
+summary: Ubuntu packaging workflow commands
+description: |
+  A suite of commands for Ubuntu packaging workflows built on Nushell.
+  Provides PPA lifecycle management, autopkgtest retry, migration status
+  (excuses), quilt patch management, and more.
+
+  Works from any shell (bash, zsh, fish) via wrapper commands, and natively
+  in Nushell for full pipeline/table support.
+
+base: core26
+build-base: devel
+grade: devel
+confinement: classic
+license: MIT
+
+platforms:
+  amd64:
+
+parts:
+  nushell:
+    plugin: nil
+    override-build: |
+      NU_VERSION=$(curl -sI https://github.com/nushell/nushell/releases/latest | grep -i ^location: | sed 's|.*/||' | tr -d '\r')
+      curl -sL "https://github.com/nushell/nushell/releases/download/${NU_VERSION}/nu-${NU_VERSION}-x86_64-unknown-linux-gnu.tar.gz" | tar xz --strip-components=1
+      install -Dm755 nu "$CRAFT_PART_INSTALL/bin/nu"
+    build-packages: [curl]
+
+  nubuntu-utils:
+    plugin: dump
+    source: .
+    stage:
+      - nubuntu-utils/**
+      - wrappers/**
+      - bin/launch
+      - bin/aliases
+    organize:
+      mod.nu: nubuntu-utils/mod.nu
+      env.nu: nubuntu-utils/env.nu
+      p.nu: nubuntu-utils/p.nu
+      q.nu: nubuntu-utils/q.nu
+      git.nu: nubuntu-utils/git.nu
+      lxd.nu: nubuntu-utils/lxd.nu
+      completions.nu: nubuntu-utils/completions.nu
+      ubuntu-versions.nu: nubuntu-utils/ubuntu-versions.nu
+      deprecated.nu: nubuntu-utils/deprecated.nu
+      packaging/: nubuntu-utils/packaging/
+      snap/wrappers/: wrappers/
+      snap/bin/launch: bin/launch
+      snap/bin/aliases: bin/aliases
+
+  runtime-deps:
+    plugin: nil
+    stage-packages:
+      - curl
+      - xz-utils
+      - gum
+
+apps:
+  excuses:
+    command: bin/launch excuses
+
+  retry-regressions:
+    command: bin/launch retry-regressions
+
+  poc:
+    command: bin/launch poc
+
+  revdeps:
+    command: bin/launch revdeps
+
+  dep-components:
+    command: bin/launch dep-components
+
+  p:
+    command: bin/launch p
+
+  q:
+    command: bin/launch q
+
+  pkg:
+    command: bin/launch pkg
+
+  spawn:
+    command: bin/launch spawn
+
+  ephemeral:
+    command: bin/launch ephemeral
+
+  lppush:
+    command: bin/launch lppush
+
+  nubuntu-shell:
+    command: bin/nu --include-path $SNAP --config $SNAP/wrappers/shell-config.nu
+
+  aliases:
+    command: bin/aliases
+
+environment:
+  NUBUNTU_PKGS_DIR: $HOME/pkgs
+  NUBUNTU_COOKIE_PATH: $HOME/.cache/autopkgtest.cookie

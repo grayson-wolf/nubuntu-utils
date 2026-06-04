@@ -1,0 +1,39 @@
+#!/bin/bash
+# Interactive alias manager for nubuntu-utils snap commands.
+# Lets users select which commands to expose without the nubuntu-utils. prefix.
+set -euo pipefail
+
+SNAP_NAME="nubuntu-utils"
+APPS=(excuses retry-regressions poc revdeps dep-components p q pkg spawn ephemeral lppush nubuntu-shell)
+
+# Use snap-bundled gum
+GUM="${SNAP}/usr/bin/gum"
+
+# Get currently enabled aliases (skip header line)
+current=$(snap aliases "$SNAP_NAME" 2>/dev/null | tail -n +2 | awk '{print $2}' || true)
+
+# Build --selected flags for currently enabled aliases
+selected_args=()
+for app in "${APPS[@]}"; do
+  if echo "$current" | grep -qx "$app"; then
+    selected_args+=("--selected=$app")
+  fi
+done
+
+# Interactive multi-select
+chosen=$( printf '%s\n' "${APPS[@]}" | "$GUM" choose --no-limit "${selected_args[@]}" \
+  --header="Select commands to alias (usable without nubuntu-utils. prefix):" ) || exit 0
+
+# Apply changes
+for app in "${APPS[@]}"; do
+  in_chosen=$(echo "$chosen" | grep -qx "$app" && echo yes || echo no)
+  in_current=$(echo "$current" | grep -qx "$app" && echo yes || echo no)
+
+  if [ "$in_chosen" = "yes" ] && [ "$in_current" = "no" ]; then
+    sudo snap alias "$SNAP_NAME.$app" "$app"
+  elif [ "$in_chosen" = "no" ] && [ "$in_current" = "yes" ]; then
+    sudo snap unalias "$app"
+  fi
+done
+
+echo "Done. Run 'snap aliases $SNAP_NAME' to see current aliases."
