@@ -60,7 +60,7 @@ export def --env pkg [
 export def poc [
   package: string # The package to check
 ]: nothing -> list<string> {
-  let cache_file = ("~/.cache/package-team-mapping.json" | path expand)
+  let cache_file = ("~/.cache/package-team-mapping.nuon" | path expand)
   let max_age = 1day
 
   # Use cached file if fresh enough
@@ -74,9 +74,9 @@ export def poc [
   let data = if $use_cache {
       open $cache_file
   } else {
-      let json = (curl -s https://static-reports.ubuntu.com/package-team-mapping.json)
+      let json = (http get https://static-reports.ubuntu.com/package-team-mapping.json)
       $json | save -f $cache_file
-      $json | from json
+      $json
   }
 
   $data | columns | where {|k| $package in ($data | get $k) }
