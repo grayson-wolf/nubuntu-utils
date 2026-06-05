@@ -313,6 +313,73 @@ export def excuses [
             } | ignore
         }
     }
+
+    # Show missing builds
+    let missing_builds = ($data | get -o missing-builds | default {})
+    let missing_arches = ($missing_builds | get -o on-architectures | default [])
+    if not ($missing_arches | is-empty) {
+        print -e $"(ansi red)Missing builds:(ansi reset) ($missing_arches | str join ', ')"
+    }
+    let missing_unimportant = ($missing_builds | get -o on-unimportant-architectures | default [])
+    if not ($missing_unimportant | is-empty) {
+        print -e $"(ansi dark_gray)Missing builds \(unimportant\):(ansi reset) ($missing_unimportant | str join ', ')"
+    }
+
+    # Show old binaries (NBS cruft)
+    let old_bins = ($data | get -o old-binaries | default {})
+    if not ($old_bins | is-empty) and ($old_bins | describe | str starts-with "record") {
+        let nbs_entries = ($old_bins | transpose ver bins | each {|entry|
+            let names = if ($entry.bins | length) > 3 {
+                let remaining = ($entry.bins | length) - 3
+                $"($entry.bins | first 3 | str join ', ') + ($remaining) more"
+            } else {
+                $entry.bins | str join ", "
+            }
+            $"($names) \(from ($entry.ver)\)"
+        })
+        print -e $"(ansi yellow)Old binaries \(NBS\):(ansi reset) ($nbs_entries | str join '; ')"
+    }
+
+    # Show block bugs (when verdict is not PASS)
+    let block_bugs = ($data | get -o policy_info.block-bugs | default {})
+    if not ($block_bugs | is-empty) and ($block_bugs | describe | str starts-with "record") {
+        let bb_verdict = ($block_bugs | get -o verdict | default "PASS")
+        if $bb_verdict != "PASS" {
+            let interactive = (term size | get columns) > 0
+            let bug_ids = ($block_bugs | reject -o verdict | columns)
+            let bug_display = ($bug_ids | each {|id|
+                let url = $"https://bugs.launchpad.net/bugs/($id)"
+                let label = $"LP#($id)"
+                if $interactive {
+                    $"\e]8;;($url)\e\\(ansi red)($label)(ansi reset)\e]8;;\e\\"
+                } else {
+                    $label
+                }
+            } | str join ", ")
+            let reason = match $bb_verdict {
+                "REJECTED_PERMANENTLY" => "permanently blocked"
+                _ => $bb_verdict
+            }
+            print -e $"(ansi red)Block bugs:(ansi reset) ($bug_display) \(($reason)\)"
+        }
+    }
+
+    # Show hints (manual blocks)
+    let hints_list = ($data | get -o hints | default [])
+    if not ($hints_list | is-empty) {
+        let hint_display = ($hints_list | each {|h|
+            $"($h.hint-type) by ($h.hint-from)"
+        } | str join ", ")
+        print -e $"(ansi magenta)Hints:(ansi reset) ($hint_display)"
+    }
+
+    # Show new binaries (from detailed-info)
+    let detailed = ($data | get -o detailed-info | default [])
+    let new_bins = ($detailed | where {|d| $d =~ "^New binary:"} | each {|d| $d | str replace "New binary: " ""})
+    if not ($new_bins | is-empty) {
+        print -e $"(ansi green)New binaries:(ansi reset) ($new_bins | str join ', ')"
+    }
+
     print -e ""
 
     # --why mode: show combined test table for all blocking dependencies
