@@ -2,11 +2,12 @@
 
 use ../completions.nu [release-completions]
 use ../ubuntu-versions.nu [LATEST_STABLE_RELEASE]
+use ../formatting.nu [osc8-link]
 
 const SRU_REPORT_URL = "https://ubuntu-archive-team.ubuntu.com/sru_report.yaml"
 
-# Format a bug ID with color based on its class, and as an OSC8 hyperlink when interactive.
-def format-bug [bug: record, interactive: bool]: nothing -> string {
+# Format a bug ID with color based on its class, as a clickable hyperlink.
+def format-bug [bug: record]: nothing -> string {
     let id = ($bug.id | into string)
     let cls = ($bug.cls | default "")
     let url = ($bug.url | default "")
@@ -29,12 +30,7 @@ def format-bug [bug: record, interactive: bool]: nothing -> string {
     }
 
     let display = if $blocked { $"🚧($colored)" } else { $colored }
-
-    if $interactive and ($url | is-not-empty) {
-        $"\e]8;;($url)\e\\($display)\e]8;;\e\\"
-    } else {
-        $display
-    }
+    osc8-link $url $display
 }
 
 # Show pending SRUs for a given series.
@@ -58,10 +54,8 @@ export def sru-list [
         $items
     }
 
-    let interactive = (term size | get columns) > 0
-
     let rows = ($entries | each {|entry|
-        let bugs_formatted = ($entry.bugs | each {|bug| format-bug $bug $interactive } | str join " ")
+        let bugs_formatted = ($entry.bugs | each {|bug| format-bug $bug } | str join " ")
         let age_dur = ($entry.age * 86400 * 1_000_000_000 | math floor | into int | into duration)
 
         let base = {

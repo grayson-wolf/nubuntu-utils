@@ -3,6 +3,7 @@
 use meta.nu [pkg-name]
 use build.nu [test-urls]
 use ../completions.nu [release-completions, ppa-completions, normalize-ppa-name, pkg-completions]
+use ../formatting.nu [osc8-link, lp-bug-link]
 use ../ubuntu-versions.nu [DEVEL_RELEASE]
 
 const EXCUSES_URL = "https://ubuntu-archive-team.ubuntu.com/proposed-migration"
@@ -108,8 +109,8 @@ export def testurl []: nothing -> nothing {
     for arch in $arches {
         let base = ($urls | where { $in.arch == $arch and not $in.proposed } | first | get url)
         let proposed = ($urls | where { $in.arch == $arch and $in.proposed } | first | get url)
-        let b_link = $"\e]8;;($base)\e\\[B]\e]8;;\e\\"
-        let p_link = $"\e]8;;($proposed)\e\\[P]\e]8;;\e\\"
+        let b_link = (osc8-link $base "[B]")
+        let p_link = (osc8-link $proposed "[P]")
         print $"($arch): ($b_link) ($p_link)\n($base)\n"
     }
 }
@@ -205,8 +206,8 @@ export def retry-regressions [
     select-and-submit $urls $cookie --no-select=$no_select --header $"Select regressions to retry for ($pkg):"
 }
 
-# Format an autopkgtest status with color and optional OSC8 hyperlink.
-def format-status [status: string, log_url: string, interactive: bool]: nothing -> string {
+# Format an autopkgtest status with color and OSC8 hyperlink.
+def format-status [status: string, log_url: string]: nothing -> string {
     let display = match $status {
         "PASS" => "Pass"
         "OLD_PASS" => "Pass°"
@@ -227,11 +228,8 @@ def format-status [status: string, log_url: string, interactive: bool]: nothing 
         "ALWAYSFAIL" | "NEUTRAL" | "OLD_NEUTRAL" | "IGNORE-FAIL" => $"(ansi dark_gray)($display)(ansi reset)"
         _ => $display
     }
-    if $interactive and ($log_url | is-not-empty) and $log_url != "https://autopkgtest.ubuntu.com/running" {
-        $"\e]8;;($log_url)\e\\($colored)\e]8;;\e\\"
-    } else {
-        $colored
-    }
+    let link_url = if $log_url == "https://autopkgtest.ubuntu.com/running" { "" } else { $log_url }
+    osc8-link $link_url $colored
 }
 
 # Statuses that indicate a problem or potential problem requiring attention.
@@ -345,16 +343,9 @@ export def excuses [
     if not ($block_bugs | is-empty) and ($block_bugs | describe | str starts-with "record") {
         let bb_verdict = ($block_bugs | get -o verdict | default "PASS")
         if $bb_verdict != "PASS" {
-            let interactive = (term size | get columns) > 0
             let bug_ids = ($block_bugs | reject -o verdict | columns)
             let bug_display = ($bug_ids | each {|id|
-                let url = $"https://bugs.launchpad.net/bugs/($id)"
-                let label = $"LP#($id)"
-                if $interactive {
-                    $"\e]8;;($url)\e\\(ansi red)($label)(ansi reset)\e]8;;\e\\"
-                } else {
-                    $label
-                }
+                lp-bug-link ($id | into int) --color (ansi red)
             } | str join ", ")
             let reason = match $bb_verdict {
                 "REJECTED_PERMANENTLY" => "permanently blocked"
@@ -389,7 +380,6 @@ export def excuses [
             print -e "No blocking dependencies to investigate."
             return []
         }
-        let interactive = (term size | get columns) > 0
         let all_rows = ($dep_pkgs | each {|dep_pkg|
             let dep_data = ($sources | where source == $dep_pkg)
             if ($dep_data | is-empty) { return [] }
@@ -422,7 +412,7 @@ export def excuses [
                 let info = ($row.archinfo | get -o $arch)
                 let status = if ($info | is-not-empty) { $info | get 0 | default "" } else { "" }
                 let log_url = if ($info | is-not-empty) { $info | get 1 | default "" } else { "" }
-                let cell = if ($status | is-empty) { "" } else { format-status $status $log_url $interactive }
+                let cell = if ($status | is-empty) { "" } else { format-status $status $log_url }
                 $acc | insert $arch $cell
             }
         })
@@ -435,8 +425,6 @@ export def excuses [
         print -e "No autopkgtest data available."
         return []
     }
-
-    let interactive = (term size | get columns) > 0
 
     let tests = ($autopkgtest | reject -o verdict | transpose pkg archinfo)
 
@@ -470,7 +458,7 @@ export def excuses [
             let cell = if ($status | is-empty) {
                 ""
             } else {
-                format-status $status $log_url $interactive
+                format-status $status $log_url
             }
             $acc | insert $arch $cell
         }
