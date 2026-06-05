@@ -1,11 +1,13 @@
 use nubuntu-utils/ *
+use nubuntu-utils/ubuntu-versions.nu [DEVEL_RELEASE]
 
 def main [
     package?: string
-    --series(-s): string = "stonking"
+    --series(-s): string
     --all-proposed(-p)
     --no-select(-n)
     --rev(-r)
 ] {
-    retry-regressions $package -s $series --all-proposed=$all_proposed --no-select=$no_select --rev=$rev
+    let s = ($series | default $DEVEL_RELEASE)
+    retry-regressions $package -s $s --all-proposed=$all_proposed --no-select=$no_select --rev=$rev
 }
