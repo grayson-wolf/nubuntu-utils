@@ -245,6 +245,7 @@ export def excuses [
     --series (-s): string = $DEVEL_RELEASE             # Ubuntu series
     --raw (-r)                                         # Output raw parsed YAML record
     --all (-a)                                         # Show all test results, not just actionable ones
+    --why (-w)                                         # Show blocking dependencies' test results
 ]: nothing -> table {
     let pkg = $package | default (pkg-name)
 
@@ -284,9 +285,66 @@ export def excuses [
 
     print -e $"(ansi attr_bold)($pkg)(ansi reset): ($old_ver) → ($new_ver)"
     print -e $"Status: ($verdict_display) | Age: ($age_dur) \(required: ($age_req_dur)\)"
+
+    # Show dependency info when present
+    let blocked_by = ($data | get -o dependencies.blocked-by | default [])
+    let migrate_after = ($data | get -o dependencies.migrate-after | default [])
+    if not ($blocked_by | is-empty) {
+        print -e $"Blocked by: (ansi red)($blocked_by | str join ', ')(ansi reset)"
+    }
+    if not ($migrate_after | is-empty) {
+        print -e $"Migrate after: (ansi yellow)($migrate_after | str join ', ')(ansi reset)"
+    }
     print -e ""
 
-    # Build the test results table
+    # --why mode: show combined test table for all blocking dependencies
+    if $why {
+        let dep_pkgs = ($blocked_by | append $migrate_after)
+        if ($dep_pkgs | is-empty) {
+            print -e "No blocking dependencies to investigate."
+            return []
+        }
+        let interactive = (term size | get columns) > 0
+        let all_rows = ($dep_pkgs | each {|dep_pkg|
+            let dep_data = ($sources | where source == $dep_pkg)
+            if ($dep_data | is-empty) { return [] }
+            let dep_entry = ($dep_data | first)
+            let autopkgtest = ($dep_entry | get -o policy_info.autopkgtest | default {})
+            if ($autopkgtest | is-empty) { return [] }
+            let tests = ($autopkgtest | reject -o verdict | transpose pkg archinfo)
+            let tests = if $all { $tests } else {
+                $tests | where {|row|
+                    $row.archinfo | values | any {|info|
+                        let status = ($info | get 0 | default "")
+                        $status in $ACTIONABLE_STATUSES
+                    }
+                }
+            }
+            $tests | each {|row|
+                { blocker: $dep_pkg, pkg: $row.pkg, archinfo: $row.archinfo }
+            }
+        } | flatten)
+
+        if ($all_rows | is-empty) {
+            print -e "\(no actionable test results in blocking dependencies\)"
+            return []
+        }
+
+        let all_arches = ($all_rows | get archinfo | each { columns } | flatten | uniq | sort)
+        let rows = ($all_rows | each {|row|
+            let base = { blocker: $row.blocker, package: $row.pkg }
+            $all_arches | reduce --fold $base {|arch, acc|
+                let info = ($row.archinfo | get -o $arch)
+                let status = if ($info | is-not-empty) { $info | get 0 | default "" } else { "" }
+                let log_url = if ($info | is-not-empty) { $info | get 1 | default "" } else { "" }
+                let cell = if ($status | is-empty) { "" } else { format-status $status $log_url $interactive }
+                $acc | insert $arch $cell
+            }
+        })
+        return $rows
+    }
+
+    # Build the test results table for the package itself
     let autopkgtest = ($data | get -o policy_info.autopkgtest)
     if ($autopkgtest | is-empty) {
         print -e "No autopkgtest data available."
@@ -310,7 +368,7 @@ export def excuses [
     }
 
     if ($tests | is-empty) {
-        print -e "(no actionable test results — use -a to show all)"
+        print -e "\(no actionable test results — use -a to show all\)"
         return []
     }
 
