@@ -7,6 +7,13 @@ use ../ubuntu-versions.nu [DEVEL_RELEASE]
 
 const EXCUSES_URL = "https://ubuntu-archive-team.ubuntu.com/proposed-migration"
 
+# Download and parse the full excuses YAML for a series.
+# Returns the `sources` table from the parsed YAML.
+def fetch-excuses [series: string]: nothing -> table {
+    let url = $"($EXCUSES_URL)/($series)/update_excuses.yaml.xz"
+    curl -s $url | xz -d | from yaml | get sources
+}
+
 # Validate and return the expanded autopkgtest cookie path.
 # Errors with setup instructions if the cookie file is missing.
 export def autopkgtest-cookie []: nothing -> string {
@@ -129,19 +136,6 @@ def collect-regressions [data: record, series: string, all_proposed: bool]: noth
     } | flatten
 }
 
-# Download and split excuses YAML into per-package text entries.
-def fetch-excuses-entries [series: string]: nothing -> list<string> {
-    let url = $"($EXCUSES_URL)/($series)/update_excuses.yaml.xz"
-    curl -s $url | xz -d | split row "\n- component:"
-}
-
-# Parse a raw excuses text entry into a YAML record.
-def parse-excuses-entry [entry: string]: nothing -> record {
-    let yaml_text = ("component:" + $entry | lines | each {|line|
-        if ($line | str starts-with "  ") { $line | str substring 2.. } else { $line }
-    } | str join "\n")
-    $yaml_text | from yaml
-}
 
 # Retry autopkgtest regressions that block a package's migration.
 # In default mode (--blocks), retries regressions in the package's own excuses entry.
@@ -179,36 +173,25 @@ export def retry-regressions [
     let cookie = autopkgtest-cookie
     let pkg = $package | default (pkg-name)
 
-    let entries = fetch-excuses-entries $series
+    let sources = fetch-excuses $series
 
     let urls = if $rev {
-        print -e $"(ansi yellow)⏳ Scanning all entries for packages blocked by ($pkg)... \(this is slow\)(ansi reset)"
-        # Pre-filter: only parse entries that textually mention the package in migrate-after context
-        let candidates = ($entries | where { $in =~ "migrate-after" and $in =~ $pkg })
-        mut fail_count = 0
-        let results = ($candidates | par-each --threads 4 {|entry|
-            let data = (try { parse-excuses-entry $entry } catch { null })
-            if ($data == null) { return [] }
-            let migrate_after = ($data | get -o dependencies.migrate-after | default [])
-            if not ($pkg in $migrate_after) { return [] }
+        print -e $"(ansi yellow)⏳ Scanning entries for packages blocked by ($pkg)...(ansi reset)"
+        let candidates = ($sources | where {|row|
+            let migrate_after = ($row | get -o dependencies.migrate-after | default [])
+            $pkg in $migrate_after
+        })
+        $candidates | each {|data|
             collect-regressions $data $series $all_proposed
-        } | flatten)
-        if ($results | is-empty) and ($candidates | length) > 0 {
-            print -e $"(ansi yellow)⚠ Some entries failed to parse; results may be incomplete(ansi reset)"
-        }
-        $results
+        } | flatten
     } else {
         # Default --blocks mode: find this package's own entry
-        let matches = ($entries | where {|entry|
-            let last_line = ($entry | lines | last | str trim)
-            $last_line == $"source: ($pkg)"
-        })
+        let matches = ($sources | where source == $pkg)
         if ($matches | is-empty) {
             print $"No excuses entry found for ($pkg) in ($series)."
             return
         }
-        let data = (parse-excuses-entry ($matches | first))
-        collect-regressions $data $series $all_proposed
+        collect-regressions ($matches | first) $series $all_proposed
     }
 
     if ($urls | is-empty) {
@@ -265,19 +248,15 @@ export def excuses [
 ]: nothing -> table {
     let pkg = $package | default (pkg-name)
 
-    let entries = fetch-excuses-entries $series
+    let sources = fetch-excuses $series
 
-    # Find the entry whose last line matches "source: <pkg>" exactly
-    let matches = ($entries | where {|entry|
-        let last_line = ($entry | lines | last | str trim)
-        $last_line == $"source: ($pkg)"
-    })
+    let matches = ($sources | where source == $pkg)
 
     if ($matches | is-empty) {
         error make { msg: $"Package '($pkg)' not found in ($series) excuses." }
     }
 
-    let data = (parse-excuses-entry ($matches | first))
+    let data = ($matches | first)
 
     if $raw {
         return $data
