@@ -65,6 +65,12 @@ export const SUPPORTED_RELEASES = [
 # The current development release.
 export const DEVEL_RELEASE = "stonking"
 
+# The latest stable (non-devel) release.
+export const LATEST_STABLE_RELEASE = "resolute"
+
+# The latest LTS release.
+export const LATEST_LTS_RELEASE = "resolute"
+
 # Look up a release name from its version number (e.g., "24.04" → "noble")
 export def version-to-name [version: string]: nothing -> string {
     let match = $ALL_RELEASES | where { $in.version == $version }
