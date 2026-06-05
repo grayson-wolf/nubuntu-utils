@@ -280,8 +280,8 @@ export def excuses [
         _ => $verdict
     }
 
-    let age_dur = if ($age | describe) == "string" { $age } else { ($age * 86400 * 1_000_000_000 | into int | into duration) }
-    let age_req_dur = if ($age_req | describe) == "string" { $age_req } else if $age_req == 0 { "none" } else { ($age_req * 86400 * 1_000_000_000 | into int | into duration) | into string }
+    let age_dur = if ($age | describe) == "string" { $age } else { ($age * 86400 | math floor | $in * 1_000_000_000 | into int | into duration) }
+    let age_req_dur = if ($age_req | describe) == "string" { $age_req } else if $age_req == 0 { "none" } else { ($age_req * 86400 | math floor | $in * 1_000_000_000 | into int | into duration) | into string }
 
     print -e $"(ansi attr_bold)($pkg)(ansi reset): ($old_ver) → ($new_ver)"
     print -e $"Status: ($verdict_display) | Age: ($age_dur) \(required: ($age_req_dur)\)"
