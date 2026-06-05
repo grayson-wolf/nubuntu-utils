@@ -4,7 +4,7 @@
 set -euo pipefail
 
 SNAP_NAME="nubuntu-utils"
-APPS=(excuses retry-regressions sru-list poc revdeps dep-components p q pkg spawn ephemeral lppush nubuntu-shell)
+APPS=(excuses retry-regressions sru-list poc revdeps dep-components p q pkg spawn ephemeral lppush buildin cpbd dch-bump getdeps images lxc-reap lxc-reap-all tarme testin testurl test-urls withgit nubuntu-shell)
 
 # Use snap-bundled gum
 GUM="${SNAP}/usr/bin/gum"

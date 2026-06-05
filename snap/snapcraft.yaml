@@ -94,6 +94,42 @@ apps:
   sru-list:
     command: bin/launch sru-list
 
+  buildin:
+    command: bin/launch buildin
+
+  cpbd:
+    command: bin/launch cpbd
+
+  dch-bump:
+    command: bin/launch dch-bump
+
+  getdeps:
+    command: bin/launch getdeps
+
+  images:
+    command: bin/launch images
+
+  lxc-reap:
+    command: bin/launch lxc-reap
+
+  lxc-reap-all:
+    command: bin/launch lxc-reap-all
+
+  tarme:
+    command: bin/launch tarme
+
+  testin:
+    command: bin/launch testin
+
+  testurl:
+    command: bin/launch testurl
+
+  test-urls:
+    command: bin/launch test-urls
+
+  withgit:
+    command: bin/launch withgit
+
   nubuntu-shell:
     command: bin/nu --include-path $SNAP --config $SNAP/wrappers/shell-config.nu
 
