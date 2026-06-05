@@ -295,6 +295,24 @@ export def excuses [
     if not ($migrate_after | is-empty) {
         print -e $"Migrate after: (ansi yellow)($migrate_after | str join ', ')(ansi reset)"
     }
+
+    # Show component mismatches (compacted by architecture)
+    let mismatches = ($data | get -o excuses | default [] | where {|e| $e =~ "cannot depend"})
+    if not ($mismatches | is-empty) {
+        let parsed = ($mismatches | each {|line|
+            let parts = ($line | parse "{pkg}/{arch} in {src} cannot depend on {dep} in {dest}")
+            if ($parts | is-empty) { null } else { $parts | first }
+        } | where {|r| $r != null})
+        if not ($parsed | is-empty) {
+            let grouped = ($parsed | group-by {|r| $"($r.pkg) in ($r.src) → ($r.dep) in ($r.dest)"})
+            print -e $"(ansi red)Component mismatches:(ansi reset)"
+            $grouped | transpose key rows | each {|g|
+                let arches = ($g.rows | get arch | uniq | str join ", ")
+                let r = ($g.rows | first)
+                print -e $"  ($r.pkg)/{($arches)} in ($r.src) → ($r.dep) in ($r.dest)"
+            } | ignore
+        }
+    }
     print -e ""
 
     # --why mode: show combined test table for all blocking dependencies
