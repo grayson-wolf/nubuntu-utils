@@ -269,8 +269,21 @@ export def excuses [
     let age = ($data | get -o policy_info.age.current-age | default "?")
     let age_req = ($data | get -o policy_info.age.age-requirement | default "?")
 
+    let verdict_display = match $verdict {
+        "PASS" => $"(ansi green)Migrating(ansi reset)"
+        "REJECTED_PERMANENTLY" => $"(ansi red)Blocked \(permanent\)(ansi reset)"
+        "REJECTED_TEMPORARILY" => $"(ansi yellow)Blocked \(temporary\)(ansi reset)"
+        "REJECTED_CANNOT_DETERMINE_IF_PERMANENT" => $"(ansi yellow)Blocked \(investigating\)(ansi reset)"
+        "REJECTED_BLOCKED_BY_ANOTHER_ITEM" => $"(ansi magenta)Blocked by dependency(ansi reset)"
+        "REJECTED_WAITING_FOR_ANOTHER_ITEM" => $"(ansi cyan)Waiting on dependency(ansi reset)"
+        _ => $verdict
+    }
+
+    let age_dur = if ($age | describe) == "string" { $age } else { ($age * 86400 * 1_000_000_000 | into int | into duration) }
+    let age_req_dur = if ($age_req | describe) == "string" { $age_req } else if $age_req == 0 { "none" } else { ($age_req * 86400 * 1_000_000_000 | into int | into duration) | into string }
+
     print -e $"(ansi attr_bold)($pkg)(ansi reset): ($old_ver) → ($new_ver)"
-    print -e $"Status: (ansi attr_bold)($verdict)(ansi reset) | Age: ($age) days \(requires: ($age_req)\)"
+    print -e $"Status: ($verdict_display) | Age: ($age_dur) \(required: ($age_req_dur)\)"
     print -e ""
 
     # Build the test results table
