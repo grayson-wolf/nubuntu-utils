@@ -119,6 +119,7 @@ excuses libsdl3 | where package =~ "freerdp"
 |---|---|
 | `excuses` | Show proposed-migration status with a colorized autopkgtest table |
 | `retry-regressions` | Retry autopkgtest regressions blocking (or blocked by) a package |
+| `sru-list` | Show pending SRUs for a series with colored/clickable bug status |
 | `testin` | Run autopkgtests in a local LXD container |
 | `testurl` | Display clickable autopkgtest request URLs for the current package |
 

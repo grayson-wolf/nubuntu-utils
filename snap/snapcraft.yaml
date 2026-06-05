@@ -91,6 +91,9 @@ apps:
   lppush:
     command: bin/launch lppush
 
+  sru-list:
+    command: bin/launch sru-list
+
   nubuntu-shell:
     command: bin/nu --include-path $SNAP --config $SNAP/wrappers/shell-config.nu
 
