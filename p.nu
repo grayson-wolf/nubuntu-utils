@@ -146,11 +146,17 @@ export def test [
 }
 
 # Display autopkgtest result summaries and retrigger URLs for a named PPA.
+# If no PPA name is given, derives it from the current package directory (like `p name`).
 export def --wrapped tests [
-    ppa_name: string@ppa-completions   # PPA name (e.g., "rsync-noble-abc123" or "graysonwolf/rsync-noble-abc123")
+    ppa_name?: string@ppa-completions   # PPA name (auto-detected if omitted)
     ...flags: string   # Extra flags passed to `ppa tests`
 ]: nothing -> nothing {
-    ppa tests (normalize-ppa-name $ppa_name) ...$flags
+    let resolved = if ($ppa_name | is-empty) {
+        ppa-name
+    } else {
+        normalize-ppa-name $ppa_name
+    }
+    ppa tests $resolved ...$flags
 }
 
 # Branch from pkg/debian/sid, bump changelog for PPA requirements, and run `p build` to test a Debian sync.
