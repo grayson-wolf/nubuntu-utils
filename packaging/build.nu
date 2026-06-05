@@ -78,7 +78,7 @@ export def test-urls [
 
     # Expand "any"/"all" to common Ubuntu architectures
     let arches = if "any" in $arches or "all" in $arches {
-        ["amd64" "arm64" "armhf" "ppc64el" "riscv64" "s390x"]
+        ["amd64" "arm64" "armhf" "i386" "ppc64el" "riscv64" "s390x"]
     } else {
         $arches
     }
