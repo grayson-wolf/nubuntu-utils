@@ -2,7 +2,7 @@
 
 use meta.nu [pkg-name]
 use build.nu [test-urls]
-use ../completions.nu [release-completions, ppa-completions, normalize-ppa-name]
+use ../completions.nu [release-completions, ppa-completions, normalize-ppa-name, pkg-completions]
 use ../ubuntu-versions.nu [DEVEL_RELEASE]
 
 const EXCUSES_URL = "https://ubuntu-archive-team.ubuntu.com/proposed-migration"
@@ -164,7 +164,7 @@ def collect-regressions [data: record, series: string, all_proposed: bool]: noth
 #
 # The cookie is valid for one month.
 export def retry-regressions [
-    package?: string        # Package name (defaults to cwd package name)
+    package?: string@pkg-completions        # Package name (defaults to cwd package name)
     --series (-s): string = $DEVEL_RELEASE  # Ubuntu series
     --all-proposed (-p)     # Run against all of proposed
     --no-select (-n)        # Skip interactive selection, retry all
@@ -241,7 +241,7 @@ const ACTIONABLE_STATUSES = ["REGRESSION", "RUNNING", "RUNNING-ALWAYSFAIL", "RUN
 # By default, only shows packages with regressions or in-progress tests.
 # Prints metadata to stderr; returns the autopkgtest results as a table for pipelines.
 export def excuses [
-    package?: string                                   # Package name (defaults to cwd package)
+    package?: string@pkg-completions                   # Package name (defaults to cwd package)
     --series (-s): string = $DEVEL_RELEASE             # Ubuntu series
     --raw (-r)                                         # Output raw parsed YAML record
     --all (-a)                                         # Show all test results, not just actionable ones
