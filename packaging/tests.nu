@@ -471,3 +471,54 @@ export def excuses [
 
     $rows
 }
+
+# Show the largest co-migration clusters currently blocking proposed migration.
+# Each row is a group of packages that must all migrate together (linked by
+# migrate-after dependencies). Useful for identifying active transitions.
+# The `waiting_for` column is a full list — pipe for detail:
+#   excuses-clusters | first | get waiting_for
+export def excuses-clusters [
+    --series (-s): string = $DEVEL_RELEASE  # Ubuntu series
+    --limit (-n): int = 5                   # Maximum number of clusters to show
+]: nothing -> table<package: string, size: int, waiting_for: list<string>> {
+    let sources = fetch-excuses $series
+
+    # Build {package, waiting_for} for every entry that has migrate-after deps
+    let with_deps = (
+        $sources
+        | each {|row|
+            let after = ($row | get -o dependencies.migrate-after | default [])
+            if ($after | is-empty) { null } else {
+                { package: $row.source, waiting_for: $after }
+            }
+        }
+        | where { $in != null }
+        | sort-by { $in.waiting_for | length } --reverse
+    )
+
+    # Walk sorted entries, deduplicating: packages already absorbed into a larger
+    # cluster are skipped (but their deps are still added to `seen`).
+    # Stop when cluster size drops below 3 or we've emitted `limit` clusters.
+    mut seen: list<string> = []
+    mut results: list<record> = []
+
+    for entry in $with_deps {
+        if $entry.package in $seen {
+            $seen = ($seen | append $entry.waiting_for)
+            continue
+        }
+        let sz = ($entry.waiting_for | length)
+        if $sz < 3 { break }
+        if ($results | length) >= $limit { break }
+
+        let excuses_url = $"https://ubuntu-archive-team.ubuntu.com/proposed-migration/update_excuses.html#($entry.package)"
+        $results = ($results | append {
+            package:     (osc8-link $excuses_url $entry.package)
+            size:        $sz
+            waiting_for: $entry.waiting_for
+        })
+        $seen = ($seen | append $entry.waiting_for)
+    }
+
+    $results
+}
