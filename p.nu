@@ -148,14 +148,17 @@ export def test [
 export def tests [
     ppa_name?: string@ppa-completions   # PPA name (auto-detected if omitted)
     --series (-s): string = $DEVEL_RELEASE  # Ubuntu series
-    --raw (-r)                              # Return structured records instead of printing
+    --arches (-a): list<string> = []        # Architectures (default: all available)
+    --history (-H)                          # Show all recent runs (not just the latest per arch)
+    --limit (-l): int = 10                  # Max runs per arch in history mode
+    --raw (-r)                              # Return structured records with full subtest data
 ]: nothing -> any {
     let resolved = if ($ppa_name | is-empty) {
         gen-ppa-name
     } else {
         normalize-ppa-name $ppa_name
     }
-    pkg-tests-table $resolved --series $series --raw=$raw
+    pkg-tests-table $resolved --series $series --arches $arches --history=$history --limit $limit --raw=$raw
 }
 
 # Branch from pkg/debian/sid, bump changelog for PPA requirements, and run `p build` to test a Debian sync.

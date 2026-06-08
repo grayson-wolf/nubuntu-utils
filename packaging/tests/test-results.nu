@@ -146,6 +146,7 @@ def fetch-ppa-test-runs [
     owner: string
     ppa: string
     max_per_arch: int = 4
+    arches: list<string> = []  # empty = all
 ]: nothing -> table {
     let base = $"($AUTOPKGTEST_URL)/results/autopkgtest-($series)-($owner)-($ppa)/"
 
@@ -153,7 +154,7 @@ def fetch-ppa-test-runs [
     let listing_text = (do --ignore-errors { http get $"($base)?format=plain" } | default "")
     if ($listing_text | is-empty) { return [] }
 
-    # 2. Parse listing into {arch, source, stamp, log_url}
+    # 2. Parse listing into {arch, source, stamp, log_url}, filter by arch if requested
     let entries = (
         $listing_text
         | lines
@@ -170,6 +171,7 @@ def fetch-ppa-test-runs [
             }
         }
         | where { $in != null }
+        | where { ($arches | is-empty) or ($in.arch in $arches) }
     )
     if ($entries | is-empty) { return [] }
 
@@ -240,27 +242,38 @@ def fetch-archive-test-runs [
 
 # Shared renderer: per-source tables with one column per subtest.
 # `header_fn` is a closure (string -> string) that builds the header from a
-# source package name (e.g. for archive: "openssh in stonking — archive").
-def render-tests-tables [header_fn: closure]: table -> nothing {
+# source package name. Prints headers to stderr and returns the rendered
+# display table(s) for pipeline use. When multiple sources are present,
+# returns a concatenated table with a leading `source` column.
+# `dedup_latest`: if true, keep only the latest run per (source, arch, kind);
+# if false, keep all runs (history mode).
+def render-tests-tables [header_fn: closure, dedup_latest: bool = true]: table -> any {
     let runs = $in
-    # Deduplicate to latest run per (source, arch, kind)
-    let deduped = (
+    let prepared = if $dedup_latest {
         $runs
         | sort-by time --reverse
         | group-by --to-table { |r| $"($r.source)|($r.arch)|($r.kind)" }
         | each {|g| $g.items | first }
-    )
+    } else {
+        # History mode: time desc (most recent first), then arch asc (stable sort).
+        $runs | sort-by source arch | sort-by time --reverse
+    }
 
-    # Group by source and print one table per package
-    let by_source = ($deduped | group-by --to-table source)
-    for $g in $by_source {
+    let by_source = ($prepared | group-by --to-table source)
+    let multi_source = (($by_source | length) > 1)
+
+    let rendered = ($by_source | each {|g|
         let pkg = $g.source
         let rows = $g.items
-        print $"\n(do $header_fn $pkg)"
+        print -e $"\n(do $header_fn $pkg)"
 
-        # Compute union of subtest names across this source's rows (preserve order
-        # of first appearance, sorted by arch/kind/time for stability)
-        let ordered = ($rows | sort-by arch kind time)
+        # Union of subtest names across this source's rows (preserve order of
+        # first appearance, sorted by arch/kind/time for stability)
+        let ordered = if $dedup_latest {
+            $rows | sort-by arch kind time
+        } else {
+            $rows | sort-by arch | sort-by time --reverse
+        }
         let subtest_names = (
             $ordered
             | reduce --fold [] {|r, acc|
@@ -269,13 +282,16 @@ def render-tests-tables [header_fn: closure]: table -> nothing {
             }
         )
 
-        # Build display rows
-        let display = ($ordered | each {|r|
+        $ordered | each {|r|
             let time_str = ($r.time | format date "%Y-%m-%d %H:%M")
-            let time_cell = (osc8-link $r.log_url $time_str)
+            let log_cell = (osc8-link $r.log_url "🔗")
             let kind_cell = if $r.kind == "proposed" { $"(ansi yellow)proposed(ansi reset)" } else { "base" }
             let overall_cell = (format-subtest $r.overall)
-            mut row = { arch: $r.arch, kind: $kind_cell, time: $time_cell, overall: $overall_cell }
+            mut row = if $multi_source {
+                { source: $pkg, arch: $r.arch, kind: $kind_cell, time: $time_str, log: $log_cell, overall: $overall_cell }
+            } else {
+                { arch: $r.arch, kind: $kind_cell, time: $time_str, log: $log_cell, overall: $overall_cell }
+            }
             for name in $subtest_names {
                 let match = ($r.subtests | where name == $name)
                 let cell = if ($match | is-empty) { "" } else {
@@ -284,18 +300,18 @@ def render-tests-tables [header_fn: closure]: table -> nothing {
                 $row = ($row | insert $name $cell)
             }
             $row
-        })
-        print $display
-    }
+        }
+    } | flatten)
+
+    print -e ""
+    $rendered
 }
 
 # Cross-series matrix renderer: rows = arch, columns = series. Cells show
 # overall status of the most recent run per (series, arch) regardless of pocket.
-# Input rows must additionally carry a `series` field.
-def render-tests-matrix [header: string, series_order: list<string>]: table -> nothing {
+# Prints header to stderr; returns the matrix table for pipeline use.
+def render-tests-matrix [header: string, series_order: list<string>]: table -> any {
     let runs = $in
-    # Latest per (series, arch) — collapse base/proposed (archive tests are
-    # virtually always proposed-pocket anyway).
     let deduped = (
         $runs
         | sort-by time --reverse
@@ -303,12 +319,12 @@ def render-tests-matrix [header: string, series_order: list<string>]: table -> n
         | each {|g| $g.items | first }
     )
 
-    print $"\n($header)"
+    print -e $"\n($header)\n"
 
     let series_present = ($deduped | get series | uniq)
     let cols = ($series_order | where { $in in $series_present })
     let arches = ($deduped | get arch | uniq | sort)
-    let display = ($arches | each {|arch|
+    $arches | each {|arch|
         mut row = { arch: $arch }
         for s in $cols {
             let match = ($deduped | where series == $s and arch == $arch)
@@ -319,18 +335,22 @@ def render-tests-matrix [header: string, series_order: list<string>]: table -> n
             $row = ($row | insert $s $cell)
         }
         $row
-    })
-    print $display
+    }
 }
 
 # Show autopkgtest results for a named PPA, as a table per source package.
 # Columns: arch, kind (base/proposed), time, then one column per subtest.
 # Cells use the same colour scheme as `excuses`.
-# Use --raw to get structured records for further pipeline work.
+# Default returns the display table (pipeline-filterable on arch / kind / time).
+# Use --raw for structured records (with `subtests` list column).
+# Use --history to show all recent runs (not just the latest per arch).
 export def pkg-tests-table [
     ppa_name: string@ppa-completions   # PPA (auto-prefixed with your LP username if bare)
     --series (-s): string = $DEVEL_RELEASE  # Ubuntu series
-    --raw (-r)                              # Return structured records instead of printing tables
+    --arches (-a): list<string> = []        # Architectures (default: all available)
+    --history (-H)                          # Show all recent runs (not just the latest per arch)
+    --limit (-l): int = 10                  # Max runs per (source, arch) to fetch in history mode
+    --raw (-r)                              # Return structured records with full subtest data
 ]: nothing -> any {
     let normalized = (normalize-ppa-name $ppa_name)
     let split = ($normalized | split row "/")
@@ -340,45 +360,58 @@ export def pkg-tests-table [
     let owner = ($split | get 0)
     let ppa = ($split | get 1)
 
-    let runs = (fetch-ppa-test-runs $series $owner $ppa)
+    let max_per_arch = if $history { $limit } else { 4 }
+    let runs = (fetch-ppa-test-runs $series $owner $ppa $max_per_arch $arches)
     if ($runs | is-empty) {
         print -e $"(ansi yellow)No test results found for ($owner)/($ppa) in ($series).(ansi reset)"
         return
     }
 
     if $raw {
-        return (
+        let prepared = if $history {
+            $runs | sort-by time --reverse
+        } else {
             $runs
             | sort-by time --reverse
             | group-by --to-table { |r| $"($r.source)|($r.arch)|($r.kind)" }
             | each {|g| $g.items | first }
-        )
+        }
+        return $prepared
     }
 
     $runs | render-tests-tables {|pkg|
         $"(ansi cyan)($pkg)(ansi reset) in (ansi yellow)($series)(ansi reset) — ($owner)/($ppa)"
-    }
+    } (not $history)
 }
 
 const DEFAULT_ARCHES = [amd64 arm64 armhf i386 ppc64el riscv64 s390x]
 const DEFAULT_SERIES = [$DEVEL_RELEASE]
 
 # Show autopkgtest results for a package in the Ubuntu archive (no PPA).
-# Default: same per-source table as `p tests` for the devel series.
+# Default: per-source table for the devel series (one row per arch, latest run).
 # Matrix mode (auto when --series has >1 entry, or via --matrix / --all-series):
 # a single arch × series grid of overall statuses (no subtest columns).
+# History mode (--history): show all recent runs per arch chronologically — useful
+# for investigating when a test started failing. Incompatible with matrix mode.
+# Default output is the display table (pipeline-filterable); use --raw for the
+# structured row data including the `subtests` list column.
 export def archive-tests [
     package?: string@pkg-completions          # Source package (defaults to cwd package)
     --series (-s): list<string> = $DEFAULT_SERIES   # Ubuntu series to query
     --arches (-a): list<string> = $DEFAULT_ARCHES   # Architectures to query
     --matrix (-m)                             # Force matrix view (auto when >1 series)
     --all-series                              # Shortcut: matrix across all supported series
-    --raw (-r)                                # Return structured records instead of printing
+    --history (-H)                            # Show all recent runs per arch (chronological)
+    --limit (-l): int = 10                    # Max runs per arch to fetch in history mode
+    --raw (-r)                                # Return structured records with full subtest data
 ]: nothing -> any {
     let pkg = if ($package | is-empty) { pkg-name } else { $package }
     let series_list = if $all_series { $SUPPORTED_RELEASES } else { $series }
     let use_matrix = $matrix or $all_series or (($series_list | length) > 1)
-    let max_per_arch = if $use_matrix { 1 } else { 4 }
+    if $history and $use_matrix {
+        error make { msg: "--history is incompatible with matrix mode (use a single --series)" }
+    }
+    let max_per_arch = if $use_matrix { 1 } else if $history { $limit } else { 4 }
 
     # Fetch in parallel across series; tag each run with its series.
     let runs = (
@@ -394,12 +427,15 @@ export def archive-tests [
     }
 
     if $raw {
-        return (
+        let prepared = if $history {
+            $runs | sort-by time --reverse
+        } else {
             $runs
             | sort-by time --reverse
             | group-by --to-table { |r| $"($r.series)|($r.source)|($r.arch)|($r.kind)" }
             | each {|g| $g.items | first }
-        )
+        }
+        return $prepared
     }
 
     if $use_matrix {
@@ -410,6 +446,6 @@ export def archive-tests [
         let s = ($series_list | first)
         $runs | render-tests-tables {|p|
             $"(ansi cyan)($p)(ansi reset) in (ansi yellow)($s)(ansi reset) — archive"
-        }
+        } (not $history)
     }
 }
