@@ -23,3 +23,8 @@ export def lp-bug-link [id: int, --color: string]: nothing -> string {
     let url = $"https://bugs.launchpad.net/bugs/($id)"
     osc8-link $url $display
 }
+
+# Convert a (possibly fractional) number of days into a Nushell duration.
+export def days-to-duration [days: number]: nothing -> duration {
+    $days * 86400 * 1_000_000_000 | math floor | into int | into duration
+}

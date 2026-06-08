@@ -62,7 +62,7 @@ export def new [
     name: string # Descriptive patch name, without the number prefix or .patch suffix
 ]: nothing -> nothing {
     # Ensure the full series is applied before creating a new patch
-    quilt push -a --fuzz=0 | complete | ignore
+    do --ignore-errors { push } | ignore
 
     # Inspect series for the NNNN- convention
     let series_file = "debian/patches/series"

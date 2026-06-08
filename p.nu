@@ -1,8 +1,8 @@
 # PPA workflow subcommands — all PPA lifecycle operations under `p`.
 
 use packaging/meta.nu [pkg-name, pkg-release, pkg-version]
-use packaging/build.nu [cpbd, tarme, ppa-name, test-urls]
-use packaging/tests.nu [autopkgtest-cookie, submit-autopkgtest, select-and-submit, ppa-test-urls]
+use packaging/build.nu [cpbd, tarme, gen-ppa-name, test-urls]
+use packaging/tests.nu [autopkgtest-cookie, autopkgtest-cookie-path, submit-autopkgtest, select-and-submit, ppa-test-urls]
 use completions.nu [ppa-completions, normalize-ppa-name]
 use ubuntu-versions.nu [DEVEL_RELEASE]
 
@@ -22,7 +22,7 @@ export def main []: nothing -> nothing {
 
 # Print the deterministic PPA name generated from the current package, release, and .changes hash.
 export def name []: nothing -> string {
-    ppa-name
+    gen-ppa-name
 }
 
 # Clean, fetch orig tarball, build source package, and upload to a freshly created PPA.
@@ -39,7 +39,7 @@ export def --wrapped build [
     let d_flag = if $no_deps { [-d] } else { [] }
     debuild -S -sa ...$d_flag ...$debuild_flags
 
-    up (ppa-name) --proposed=$proposed --security=$security --backports=$backports
+    up (gen-ppa-name) --proposed=$proposed --security=$security --backports=$backports
 }
 
 # Create a named PPA, dput the .changes, wait for build, auto-submit autopkgtests, notify, and show test status.
@@ -63,7 +63,7 @@ export def up [
     ppa wait $ppa_path
 
     # Auto-submit autopkgtest requests via cookie
-    let cookie = ([$env.NUBUNTU_CACHE_DIR "autopkgtest.cookie"] | path join | path expand)
+    let cookie = autopkgtest-cookie-path
     let notify_text = if ($cookie | path exists) {
         let urls = (test-urls)
         let results = ($urls | par-each {|entry|
@@ -138,14 +138,8 @@ export def test [
             return
         }
 
-        let label = if $proposed { "proposed" } else { "base" }
-        print $"Submitting ($urls | length) autopkgtest request\(s\) \(($label)\)..."
-
-        $urls | par-each {|entry|
-            let result = (submit-autopkgtest $entry.url $cookie)
-            let suffix = if $entry.proposed { " (proposed)" } else { "" }
-            print $"  ($entry.arch)($suffix): ($result)"
-        } | ignore
+        let header = if $proposed { "Select proposed tests to submit:" } else { "Select tests to submit:" }
+        select-and-submit ($urls | get url) $cookie --no-select=$no_select --header $header
     }
 }
 
@@ -156,7 +150,7 @@ export def --wrapped tests [
     ...flags: string   # Extra flags passed to `ppa tests`
 ]: nothing -> nothing {
     let resolved = if ($ppa_name | is-empty) {
-        ppa-name
+        gen-ppa-name
     } else {
         normalize-ppa-name $ppa_name
     }

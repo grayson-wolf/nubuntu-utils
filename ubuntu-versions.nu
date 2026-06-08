@@ -62,6 +62,9 @@ export const SUPPORTED_RELEASES = [
     "stonking"  # 26.10     — current devel
 ]
 
+# Architectures to request autopkgtests for when a package is Architecture: any/all.
+export const ARCHES = ["amd64" "arm64" "armhf" "i386" "ppc64el" "riscv64" "s390x"]
+
 # The current development release.
 export const DEVEL_RELEASE = "stonking"
 

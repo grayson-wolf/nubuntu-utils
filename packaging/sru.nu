@@ -1,8 +1,8 @@
 # SRU (Stable Release Update) tracking commands
 
 use ../completions.nu [release-completions]
+use ../formatting.nu [osc8-link, days-to-duration]
 use ../ubuntu-versions.nu [LATEST_STABLE_RELEASE]
-use ../formatting.nu [osc8-link]
 
 const SRU_REPORT_URL = "https://ubuntu-archive-team.ubuntu.com/sru_report.yaml"
 
@@ -56,7 +56,7 @@ export def sru-list [
 
     let rows = ($entries | each {|entry|
         let bugs_formatted = ($entry.bugs | each {|bug| format-bug $bug } | str join " ")
-        let age_dur = ($entry.age * 86400 * 1_000_000_000 | math floor | into int | into duration)
+        let age_dur = (days-to-duration $entry.age)
 
         let base = {
             package: $entry.pkg

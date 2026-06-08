@@ -3,7 +3,7 @@
 use meta.nu [pkg-name]
 use build.nu [test-urls]
 use ../completions.nu [release-completions, ppa-completions, normalize-ppa-name, pkg-completions]
-use ../formatting.nu [osc8-link, lp-bug-link]
+use ../formatting.nu [osc8-link, lp-bug-link, days-to-duration]
 use ../ubuntu-versions.nu [DEVEL_RELEASE]
 
 const EXCUSES_URL = "https://ubuntu-archive-team.ubuntu.com/proposed-migration"
@@ -15,10 +15,15 @@ def fetch-excuses [series: string]: nothing -> table {
     curl -s $url | xz -d | from yaml | get sources
 }
 
+# Return the expanded autopkgtest cookie path (does not check existence).
+export def autopkgtest-cookie-path []: nothing -> string {
+    [$env.NUBUNTU_CACHE_DIR "autopkgtest.cookie"] | path join | path expand
+}
+
 # Validate and return the expanded autopkgtest cookie path.
 # Errors with setup instructions if the cookie file is missing.
 export def autopkgtest-cookie []: nothing -> string {
-    let cookie = ([$env.NUBUNTU_CACHE_DIR "autopkgtest.cookie"] | path join | path expand)
+    let cookie = autopkgtest-cookie-path
     if not ($cookie | path exists) {
         error make { msg: $"Autopkgtest cookie not found at ($cookie). Export your autopkgtest.ubuntu.com session cookie to this file." }
     }
@@ -278,8 +283,8 @@ export def excuses [
         _ => $verdict
     }
 
-    let age_dur = if ($age | describe) == "string" { $age } else { ($age * 86400 | math floor | $in * 1_000_000_000 | into int | into duration) }
-    let age_req_dur = if ($age_req | describe) == "string" { $age_req } else if $age_req == 0 { "none" } else { ($age_req * 86400 | math floor | $in * 1_000_000_000 | into int | into duration) | into string }
+    let age_dur = if ($age | describe) == "string" { $age } else { (days-to-duration $age) }
+    let age_req_dur = if ($age_req | describe) == "string" { $age_req } else if $age_req == 0 { "none" } else { (days-to-duration $age_req) | into string }
 
     print -e $"(ansi attr_bold)($pkg)(ansi reset): ($old_ver) → ($new_ver)"
     print -e $"Status: ($verdict_display) | Age: ($age_dur) \(required: ($age_req_dur)\)"

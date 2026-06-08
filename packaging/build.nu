@@ -2,6 +2,7 @@
 
 use meta.nu [pkg-release, pkg-upstream-version, pkg-version, pkg-name]
 use ../completions.nu [release-completions]
+use ../ubuntu-versions.nu [ARCHES]
 
 # Clear Parent Build Directory
 # wipes debbuilds from the parent directory
@@ -52,7 +53,7 @@ export def getdeps []: nothing -> nothing {
 
 # PPA Name Generator
 # Generates a PPA name based on the package directory name, release, and the hash of the most recent .changes file.
-export def ppa-name []: nothing -> string {
+export def gen-ppa-name []: nothing -> string {
     let pkg_name = pkg-name
     let changes_hash = sha256sum ../*.changes | str substring 0..7
     $"($pkg_name)-(pkg-release)-($changes_hash)"
@@ -66,7 +67,7 @@ export def test-urls [
     let pkg_name = pkg-name
     let version = pkg-version
     let release_name = pkg-release
-    let ppa = ppa-name
+    let ppa = gen-ppa-name
 
     # Parse architectures from debian/control
     let arches = (open debian/control
@@ -78,7 +79,7 @@ export def test-urls [
 
     # Expand "any"/"all" to common Ubuntu architectures
     let arches = if "any" in $arches or "all" in $arches {
-        ["amd64" "arm64" "armhf" "i386" "ppc64el" "riscv64" "s390x"]
+        $ARCHES
     } else {
         $arches
     }
