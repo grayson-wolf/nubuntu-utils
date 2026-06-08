@@ -149,7 +149,11 @@ excuses libsdl3 | where package =~ "freerdp"
 
 | Command | Description |
 |---|---|
-| `lppush` | Push to your Launchpad fork with optional merge-tag support |
+| `dr` | Show available deltarebase subcommands |
+| `dr auto` | Start (or restart) a `git ubuntu deltarebase auto` |
+| `dr continue` | Continue a paused deltarebase |
+| `dr abort` | Abort an in-progress deltarebase |
+| `lppush` | Push to your Launchpad fork (`lppush -f` for force — uses `--force-with-lease`; `lppush -m` also pushes merge tags). |
 | `withgit` | Run an external command with `GITHUB_TOKEN` exposed |
 | `withgit-do` | Run a nushell closure with `GITHUB_TOKEN` exposed |
 
@@ -161,4 +165,4 @@ excuses libsdl3 | where package =~ "freerdp"
 | `ephemeral` | Spawn a temporary container that self-destructs on exit |
 | `lxc-reap` | Stop and delete a single container |
 | `lxc-reap-all` | Reap all orphaned ephemeral containers |
-| `images` | List images from a given LXD remote as a nushell table |
+| `images` | List images from a given LXD remote as a table; optionally filter by alias (e.g., `images ubuntu-daily: resolute`) |
