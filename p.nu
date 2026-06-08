@@ -2,7 +2,7 @@
 
 use packaging/meta.nu [pkg-name, pkg-release, pkg-version]
 use packaging/build.nu [cpbd, tarme, gen-ppa-name, test-urls]
-use packaging/tests.nu [autopkgtest-cookie, autopkgtest-cookie-path, submit-autopkgtest, select-and-submit, ppa-test-urls, pkg-tests-table]
+use packaging/tests/ [autopkgtest-cookie, autopkgtest-cookie-path, submit-autopkgtest, select-and-submit, ppa-test-urls, pkg-tests-table]
 use completions.nu [ppa-completions, normalize-ppa-name]
 use ubuntu-versions.nu [DEVEL_RELEASE]
 
