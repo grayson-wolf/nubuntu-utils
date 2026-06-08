@@ -64,6 +64,9 @@ apps:
   excuses-clusters:
     command: bin/launch excuses-clusters
 
+  archive-tests:
+    command: bin/launch archive-tests
+
   retry-regressions:
     command: bin/launch retry-regressions
 
