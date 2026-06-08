@@ -271,7 +271,7 @@ def render-tests-tables [header_fn: closure]: table -> nothing {
 
         # Build display rows
         let display = ($ordered | each {|r|
-            let time_str = ($r.time | format date "%d.%m.%y %H:%M")
+            let time_str = ($r.time | format date "%Y-%m-%d %H:%M")
             let time_cell = (osc8-link $r.log_url $time_str)
             let kind_cell = if $r.kind == "proposed" { $"(ansi yellow)proposed(ansi reset)" } else { "base" }
             let overall_cell = (format-subtest $r.overall)
