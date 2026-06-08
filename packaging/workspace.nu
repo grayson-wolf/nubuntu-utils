@@ -9,21 +9,28 @@ def --env mkcd [path: string]: nothing -> nothing {
     cd $path
 }
 
-# Bump the changelog version, commit it, then update the Maintainer field for Ubuntu.
-# Produces two atomic commits:
+# Bump the changelog version and update the Maintainer field for Ubuntu.
+# By default produces two atomic commits:
 #   1. "changelog" — the dch -i change to debian/changelog
 #   2. "update-maintainer" — any Maintainer field updates (debian/control, debian/control.in)
-export def dch-bump []: nothing -> nothing {
+# With --no-commit, stages nothing and makes no commits (useful when you want to amend or
+# batch commits manually, or when you just ran `dch -i; update-maintainer` by hand).
+export def dch-bump [
+    --no-commit (-n)  # Skip all git add/commit steps; just bump and update-maintainer
+]: nothing -> nothing {
     dch -i
-    git add debian/changelog
-    git commit -m "changelog"
-
     update-maintainer
-    # Stage any files update-maintainer modified, then check if there's anything to commit
-    git add debian/control debian/control.in 2>/dev/null | ignore
-    let staged = (git diff --cached --name-only | lines | where { $in != "" })
-    if not ($staged | is-empty) {
-        git commit -m "update-maintainer"
+
+    if not $no_commit {
+        git add debian/changelog
+        git commit -m "changelog"
+
+        # Stage any files update-maintainer modified, then check if there's anything to commit
+        git add debian/control debian/control.in 2>/dev/null | ignore
+        let staged = (git diff --cached --name-only | lines | where { $in != "" })
+        if not ($staged | is-empty) {
+            git commit -m "update-maintainer"
+        }
     }
 }
 
