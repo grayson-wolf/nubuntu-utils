@@ -110,7 +110,7 @@ export def destroy [
 # Without --ppa, derives URLs from the current package directory.
 # With --ppa, fetches URLs from any named PPA and offers interactive selection.
 export def test [
-    --proposed (-p)                          # Also submit all-proposed variants
+    --proposed (-p)                          # Submit only the all-proposed variants
     --ppa: string@ppa-completions            # Named PPA to test (skips local derivation)
     --no-select                              # Skip interactive selection, submit all
 ]: nothing -> nothing {
@@ -118,7 +118,11 @@ export def test [
 
     if ($ppa | is-not-empty) {
         let ppa_name = normalize-ppa-name $ppa
-        let urls = (ppa-test-urls $ppa_name --proposed=$proposed)
+        let urls = if $proposed {
+            ppa-test-urls $ppa_name --proposed | where { $in =~ "all-proposed" }
+        } else {
+            ppa-test-urls $ppa_name
+        }
 
         if ($urls | is-empty) {
             print $"No test URLs found for PPA ($ppa_name)."
@@ -127,14 +131,14 @@ export def test [
 
         select-and-submit $urls $cookie --no-select=$no_select --header $"Select tests for PPA ($ppa_name):"
     } else {
-        let urls = if $proposed { test-urls --proposed } else { test-urls }
+        let urls = if $proposed { test-urls --proposed | where proposed == true } else { test-urls }
 
         if ($urls | is-empty) {
             print "No test URLs generated."
             return
         }
 
-        let label = if $proposed { "base + proposed" } else { "base" }
+        let label = if $proposed { "proposed" } else { "base" }
         print $"Submitting ($urls | length) autopkgtest request\(s\) \(($label)\)..."
 
         $urls | par-each {|entry|
