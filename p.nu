@@ -2,7 +2,7 @@
 
 use packaging/meta.nu [pkg-name, pkg-release, pkg-version]
 use packaging/build.nu [cpbd, tarme, gen-ppa-name, test-urls]
-use packaging/tests.nu [autopkgtest-cookie, autopkgtest-cookie-path, submit-autopkgtest, select-and-submit, ppa-test-urls]
+use packaging/tests.nu [autopkgtest-cookie, autopkgtest-cookie-path, submit-autopkgtest, select-and-submit, ppa-test-urls, pkg-tests-table]
 use completions.nu [ppa-completions, normalize-ppa-name]
 use ubuntu-versions.nu [DEVEL_RELEASE]
 
@@ -145,16 +145,17 @@ export def test [
 
 # Display autopkgtest result summaries and retrigger URLs for a named PPA.
 # If no PPA name is given, derives it from the current package directory (like `p name`).
-export def --wrapped tests [
+export def tests [
     ppa_name?: string@ppa-completions   # PPA name (auto-detected if omitted)
-    ...flags: string   # Extra flags passed to `ppa tests`
-]: nothing -> nothing {
+    --series (-s): string = $DEVEL_RELEASE  # Ubuntu series
+    --raw (-r)                              # Return structured records instead of printing
+]: nothing -> any {
     let resolved = if ($ppa_name | is-empty) {
         gen-ppa-name
     } else {
         normalize-ppa-name $ppa_name
     }
-    ppa tests $resolved ...$flags
+    pkg-tests-table $resolved --series $series --raw=$raw
 }
 
 # Branch from pkg/debian/sid, bump changelog for PPA requirements, and run `p build` to test a Debian sync.

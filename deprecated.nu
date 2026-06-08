@@ -79,12 +79,17 @@ export def ppa-autotest [
 }
 
 # Legacy wrapper for `p tests`
-export def --wrapped ppa-tests [
+export def ppa-tests [
     ppa_name: string@ppa-completions
-    ...flags: string
-]: nothing -> nothing {
+    --series (-s): string
+    --raw (-r)
+]: nothing -> any {
     print $"(ansi yellow_bold)⚠ `ppa-tests` is deprecated, use `p tests` instead(ansi reset)"
-    p tests $ppa_name ...$flags
+    if ($series | is-empty) {
+        p tests $ppa_name --raw=$raw
+    } else {
+        p tests $ppa_name --series $series --raw=$raw
+    }
 }
 
 # Legacy wrapper for `p sync`
