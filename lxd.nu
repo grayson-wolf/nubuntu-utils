@@ -71,11 +71,16 @@ export def lxc-reap-all []: nothing -> nothing {
     print $"Cleaned up ($containers | length) container\(s\)."
 }
 
-# List all images at a given source into a nushell table
+# List all images at a given source into a nushell table.
+# Pass an optional alias substring to filter results (e.g., `images ubuntu-daily: resolute`).
 export def images [
-    source: string # The source of images to list.
+    source: string                          # The LXD remote to list (e.g., ubuntu-daily:)
+    alias?: string@release-completions      # Optional alias substring to filter by
 ]: nothing -> table {
-    lxc image list $source -f json
-    | from json
-    | update aliases { default [] }
+    let imgs = (lxc image list $source -f json | from json | update aliases { default [] })
+    if ($alias | is-empty) {
+        $imgs
+    } else {
+        $imgs | where {|row| $row.aliases | any {|a| ($a.name | str downcase) =~ ($alias | str downcase) } }
+    }
 }
