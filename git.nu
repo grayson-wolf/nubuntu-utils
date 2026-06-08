@@ -60,3 +60,40 @@ export def --wrapped lppush [
         }
     }
 }
+
+# Resolve the git-ubuntu binary to use.
+# Checks $env.GIT_UBUNTU_BIN first (useful for pointing at a local fork);
+# falls back to the system `git-ubuntu`.
+def gu []: nothing -> string {
+    $env.GIT_UBUNTU_BIN? | default "git-ubuntu"
+}
+
+# git ubuntu deltarebase helpers. Run bare `dr` to see available subcommands.
+export def dr []: nothing -> nothing {
+    print "git ubuntu deltarebase helpers. Available subcommands:\n"
+    print "  dr auto      — Start (or restart) an automatic deltarebase"
+    print "  dr continue  — Continue a paused deltarebase"
+    print "  dr abort     — Abort an in-progress deltarebase"
+    print $"\nRun `dr <subcommand> --help` for details."
+    print $"\nTo use a local git-ubuntu fork, set \$env.GIT_UBUNTU_BIN to its path."
+}
+
+# Run `git ubuntu deltarebase auto`.
+# Pass extra flags through (e.g., --dry-run).
+export def --wrapped "dr auto" [
+    ...flags: string  # Extra flags forwarded to deltarebase auto
+]: nothing -> nothing {
+    run-external (gu) "deltarebase" "auto" ...$flags
+}
+
+# Continue a paused `git ubuntu deltarebase`.
+export def --wrapped "dr continue" [
+    ...flags: string  # Extra flags forwarded to deltarebase continue
+]: nothing -> nothing {
+    run-external (gu) "deltarebase" "continue" ...$flags
+}
+
+# Abort an in-progress `git ubuntu deltarebase`.
+export def "dr abort" []: nothing -> nothing {
+    run-external (gu) "deltarebase" "abort"
+}
