@@ -44,6 +44,7 @@ parts:
       lxd.nu: nubuntu-utils/lxd.nu
       completions.nu: nubuntu-utils/completions.nu
       ubuntu-versions.nu: nubuntu-utils/ubuntu-versions.nu
+      formatting.nu: nubuntu-utils/formatting.nu
       deprecated.nu: nubuntu-utils/deprecated.nu
       packaging/: nubuntu-utils/packaging/
       snap/wrappers/: wrappers/
