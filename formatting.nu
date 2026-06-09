@@ -24,9 +24,12 @@ export def lp-bug-link [id: int, --color: string]: nothing -> string {
     osc8-link $url $display
 }
 
-# Convert a (possibly fractional) number of days into a Nushell duration.
+# Convert a (possibly fractional) number of days into a Nushell duration,
+# rounded to the nearest minute (so the display stays human-readable:
+# "12hr 36min" rather than "12hr 36min 2sec 999ms 999µs 999ns").
 export def days-to-duration [days: number]: nothing -> duration {
-    $days * 86400 * 1_000_000_000 | math floor | into int | into duration
+    let minutes = ($days * 1440 | math round | into int)
+    $minutes * 60_000_000_000 | into duration
 }
 
 # Convert a gum-style color spec to an ANSI SGR foreground escape.
