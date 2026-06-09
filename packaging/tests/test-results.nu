@@ -175,7 +175,7 @@ def fetch-and-parse-logs []: table -> table {
 # Fetch and parse all available test runs for a (series, owner, ppa).
 # Returns table<source, arch, kind, time, log_url, overall, subtests>
 # Keeps up to `max_per_arch` most recent runs per (source, arch) before downloading logs.
-def fetch-ppa-test-runs [
+export def fetch-ppa-test-runs [
     series: string
     owner: string
     ppa: string
@@ -281,7 +281,7 @@ def fetch-archive-test-runs [
 # returns a concatenated table with a leading `source` column.
 # `dedup_latest`: if true, keep only the latest run per (source, arch, kind);
 # if false, keep all runs (history mode).
-def render-tests-tables [header_fn: closure, dedup_latest: bool = true]: table -> any {
+export def render-tests-tables [header_fn: closure, dedup_latest: bool = true]: table -> any {
     let runs = $in
     let prepared = if $dedup_latest {
         $runs
@@ -370,52 +370,6 @@ def render-tests-matrix [header: string, series_order: list<string>]: table -> a
         }
         $row
     }
-}
-
-# Show autopkgtest results for a named PPA, as a table per source package.
-# Columns: arch, kind (base/proposed), time, then one column per subtest.
-# Cells use the same colour scheme as `excuses`.
-# Default returns the display table (pipeline-filterable on arch / kind / time).
-# Use --raw for structured records (with `subtests` list column).
-# Use --history to show all recent runs (not just the latest per arch).
-export def pkg-tests-table [
-    ppa_name: string@ppa-completions   # PPA (auto-prefixed with your LP username if bare)
-    --series (-s): string = $DEVEL_RELEASE  # Ubuntu series
-    --arches (-a): list<string> = []        # Architectures (default: all available)
-    --history (-H)                          # Show all recent runs (not just the latest per arch)
-    --limit (-l): int = 10                  # Max runs per (source, arch) to fetch in history mode
-    --raw (-r)                              # Return structured records with full subtest data
-]: nothing -> any {
-    let normalized = (normalize-ppa-name $ppa_name)
-    let split = ($normalized | split row "/")
-    if ($split | length) < 2 {
-        error make { msg: $"Could not parse PPA name '($ppa_name)' into owner/name" }
-    }
-    let owner = ($split | get 0)
-    let ppa = ($split | get 1)
-
-    let max_per_arch = if $history { $limit } else { 4 }
-    let runs = (fetch-ppa-test-runs $series $owner $ppa $max_per_arch $arches)
-    if ($runs | is-empty) {
-        print -e $"(ansi yellow)No test results found for ($owner)/($ppa) in ($series).(ansi reset)"
-        return
-    }
-
-    if $raw {
-        let prepared = if $history {
-            $runs | sort-by time --reverse
-        } else {
-            $runs
-            | sort-by time --reverse
-            | group-by --to-table { |r| $"($r.source)|($r.arch)|($r.kind)" }
-            | each {|g| $g.items | first }
-        }
-        return $prepared
-    }
-
-    $runs | render-tests-tables {|pkg|
-        $"(ansi cyan)($pkg)(ansi reset) in (ansi yellow)($series)(ansi reset) — ($owner)/($ppa)"
-    } (not $history)
 }
 
 const DEFAULT_ARCHES = [amd64 arm64 armhf i386 ppc64el riscv64 s390x]

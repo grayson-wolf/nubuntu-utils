@@ -2,7 +2,7 @@
 
 use packaging/meta.nu [pkg-name, pkg-release, pkg-version]
 use packaging/build.nu [cpbd, tarme, gen-ppa-name, test-urls]
-use packaging/tests/ [autopkgtest-cookie, autopkgtest-cookie-path, submit-autopkgtest, select-and-submit, ppa-test-urls, pkg-tests-table]
+use packaging/tests/ [autopkgtest-cookie, autopkgtest-cookie-path, submit-autopkgtest, select-and-submit, ppa-test-urls, fetch-ppa-test-runs, render-tests-tables]
 use completions.nu [ppa-completions, normalize-ppa-name]
 use ubuntu-versions.nu [DEVEL_RELEASE]
 
@@ -145,6 +145,10 @@ export def test [
 
 # Display autopkgtest result summaries and retrigger URLs for a named PPA.
 # If no PPA name is given, derives it from the current package directory (like `p name`).
+# Columns: arch, kind (base/proposed), time, then one column per subtest.
+# Default returns the display table (pipeline-filterable on arch / kind / time).
+# Use --raw for structured records (with `subtests` list column).
+# Use --history to show all recent runs (not just the latest per arch).
 export def tests [
     ppa_name?: string@ppa-completions   # PPA name (auto-detected if omitted)
     --series (-s): string = $DEVEL_RELEASE  # Ubuntu series
@@ -158,7 +162,35 @@ export def tests [
     } else {
         normalize-ppa-name $ppa_name
     }
-    pkg-tests-table $resolved --series $series --arches $arches --history=$history --limit $limit --raw=$raw
+    let split = ($resolved | split row "/")
+    if ($split | length) < 2 {
+        error make { msg: $"Could not parse PPA name '($resolved)' into owner/name" }
+    }
+    let owner = ($split | get 0)
+    let ppa = ($split | get 1)
+
+    let max_per_arch = if $history { $limit } else { 4 }
+    let runs = (fetch-ppa-test-runs $series $owner $ppa $max_per_arch $arches)
+    if ($runs | is-empty) {
+        print -e $"(ansi yellow)No test results found for ($owner)/($ppa) in ($series).(ansi reset)"
+        return
+    }
+
+    if $raw {
+        let prepared = if $history {
+            $runs | sort-by time --reverse
+        } else {
+            $runs
+            | sort-by time --reverse
+            | group-by --to-table { |r| $"($r.source)|($r.arch)|($r.kind)" }
+            | each {|g| $g.items | first }
+        }
+        return $prepared
+    }
+
+    $runs | render-tests-tables {|pkg|
+        $"(ansi cyan)($pkg)(ansi reset) in (ansi yellow)($series)(ansi reset) — ($owner)/($ppa)"
+    } (not $history)
 }
 
 # Branch from pkg/debian/sid, bump changelog for PPA requirements, and run `p build` to test a Debian sync.
