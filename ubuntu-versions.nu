@@ -96,3 +96,10 @@ export def name-to-version [name: string]: nothing -> string {
 export def is-supported [name: string]: nothing -> bool {
     $name in $SUPPORTED_RELEASES
 }
+
+# Index of a release in ALL_RELEASES (chronological order). Returns -1 if
+# the name is unknown. Useful for comparing release ages.
+export def release-rank [name: string]: nothing -> int {
+    let m = ($ALL_RELEASES | enumerate | where { $in.item.name == $name })
+    if ($m | is-empty) { -1 } else { $m | first | get index }
+}

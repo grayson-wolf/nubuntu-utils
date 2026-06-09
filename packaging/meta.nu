@@ -20,3 +20,23 @@ export def pkg-version []: nothing -> string {
 export def pkg-upstream-version []: nothing -> string {
     pkg-version | str replace -r '^[0-9]+:' '' | str replace -r '-[^-]+$' ''
 }
+
+# Find the most-recently-published Ubuntu release for this package by walking
+# debian/changelog from top to bottom and returning the first entry whose
+# distribution (after stripping pocket suffix like -backports/-security)
+# matches a known Ubuntu codename. Skips UNRELEASED-prefixed entries and any
+# Debian-only distros (unstable, experimental, bookworm, trixie, ...).
+# Returns null if no Ubuntu entry is found (e.g. fresh Debian sync).
+export def last-published-release []: nothing -> any {
+    use ../ubuntu-versions.nu [ALL_RELEASES]
+    let ubuntu_names = ($ALL_RELEASES | get name)
+    open debian/changelog
+        | lines
+        | where { $in =~ '^\S+ \(.+?\) \S+; urgency=' }
+        | each {|line|
+            $line | split row " " | get 2 | str replace ";" "" | split row "-" | get 0
+        }
+        | where { $in !~ '(?i)^UNRELEASED' }
+        | where { $in in $ubuntu_names }
+        | get -o 0
+}
