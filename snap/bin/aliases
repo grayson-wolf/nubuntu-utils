@@ -5,19 +5,25 @@ set -euo pipefail
 
 SNAP_NAME="nubuntu-utils"
 
-# Derive APPS from the installed snap (single source of truth — the
-# snapcraft.yaml `apps:` block). Exclude the alias manager itself to avoid
-# shadowing the shell `alias` builtin.
+# Derive APPS from $SNAP/meta/snap.yaml (the deployed manifest — single source
+# of truth, snapcraft.yaml's `apps:` block in deployed form). Avoids depending
+# on `snap apps` which may not work from inside a snap without snapd-control.
+# Exclude the alias manager itself to avoid shadowing the shell builtin.
+SNAP_YAML="${SNAP:-/snap/$SNAP_NAME/current}/meta/snap.yaml"
 mapfile -t APPS < <(
-    snap apps "$SNAP_NAME" 2>/dev/null \
-        | tail -n +2 \
-        | awk -v sn="$SNAP_NAME." '{ sub("^"sn, "", $1); print $1 }' \
+    awk '
+        /^apps:$/        { in_apps = 1; next }
+        /^[^ ]/          { in_apps = 0 }
+        in_apps && /^  [a-zA-Z][a-zA-Z0-9_-]*:$/ {
+            gsub(/[: ]/, ""); print
+        }
+    ' "$SNAP_YAML" \
         | grep -vx aliases \
         | sort
 )
 
 if [ "${#APPS[@]}" -eq 0 ]; then
-    echo "No $SNAP_NAME apps found (is the snap installed?)" >&2
+    echo "No $SNAP_NAME apps found in $SNAP_YAML" >&2
     exit 1
 fi
 
