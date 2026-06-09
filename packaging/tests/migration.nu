@@ -83,8 +83,8 @@ export def excuses [
     --series (-s): string = $DEVEL_RELEASE             # Ubuntu series
     --raw (-r)                                         # Output raw parsed YAML record
     --all (-a)                                         # Show all test results, not just actionable ones
-    --why (-w)                                         # Show blocking dependencies' test results
-    --delineate (-d)                                   # Refine REGRESSION cells with log-derived failure mode (real-fail / timeout / tmpfail / badpkg / broken)
+    --why (-w)                                         # Refine REGRESSION cells with log-derived failure mode (real-fail / timeout / tmpfail / badpkg / broken)
+    --dependencies (-d)                                # Show blocking dependencies' test results
 ]: nothing -> table {
     let pkg = $package | default (pkg-name)
 
@@ -214,8 +214,8 @@ export def excuses [
 
     print -e ""
 
-    # --why mode: show combined test table for all blocking dependencies
-    if $why {
+    # --dependencies mode: show combined test table for all blocking dependencies
+    if $dependencies {
         let dep_pkgs = ($blocked_by | append $migrate_after)
         if ($dep_pkgs | is-empty) {
             print -e "No blocking dependencies to investigate."
@@ -248,8 +248,8 @@ export def excuses [
 
         let all_arches = ($all_rows | get archinfo | each { columns } | flatten | uniq | sort)
 
-        # If --delineate, collect every refinable cell's log URL and fetch in parallel.
-        let refinement = if $delineate {
+        # If --why, collect every refinable cell's log URL and fetch in parallel.
+        let refinement = if $why {
             let urls = ($all_rows | each {|row|
                 $all_arches | each {|arch|
                     let info = ($row.archinfo | get -o $arch)
@@ -269,7 +269,7 @@ export def excuses [
                 let info = ($row.archinfo | get -o $arch)
                 let status = if ($info | is-not-empty) { $info | get 0 | default "" } else { "" }
                 let log_url = if ($info | is-not-empty) { $info | get 1 | default "" } else { "" }
-                let refined = if ($delineate and ($log_url | is-not-empty)) {
+                let refined = if ($why and ($log_url | is-not-empty)) {
                     $refinement | get -o $log_url | default ""
                 } else { "" }
                 let cell = if ($status | is-empty) { "" } else { format-status $status $log_url $refined }
@@ -280,7 +280,7 @@ export def excuses [
     }
 
     # Build the test results table for the package itself
-    let rows = (build-autopkgtest-rows ($data | get -o policy_info.autopkgtest | default {}) $all $delineate [])
+    let rows = (build-autopkgtest-rows ($data | get -o policy_info.autopkgtest | default {}) $all $why [])
     if ($rows | is-empty) {
         let autopkgtest = ($data | get -o policy_info.autopkgtest)
         if ($autopkgtest | is-empty) {
@@ -439,7 +439,7 @@ export def my-excuses [
     --series (-s): string = $DEVEL_RELEASE  # Ubuntu series
     --user (-u): string = ""                # LP username (default: $env.LAUNCHPAD_NAME)
     --detailed (-D)                         # Also render full per-package excuses output
-    --delineate (-d)                        # Refine REGRESSION cells (only with --detailed)
+    --why (-w)                              # Refine REGRESSION cells with log-derived failure mode (only with --detailed)
     --limit (-n): int = 0                   # Cap on excuses sources to query (0 = all). Useful for testing.
     --raw (-r)                              # Return structured records
 ]: nothing -> any {
@@ -503,7 +503,7 @@ export def my-excuses [
 
     let unified = ($candidates | each {|c|
         let at = ($c | get -o policy_info.autopkgtest | default {})
-        let rows = (build-autopkgtest-rows $at false $delineate $global_arches)
+        let rows = (build-autopkgtest-rows $at false $why $global_arches)
         $rows | each {|r| { "blocked-package": $c.source } | merge $r }
     } | flatten)
 
