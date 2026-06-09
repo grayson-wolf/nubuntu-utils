@@ -1,8 +1,9 @@
 # Proposed-migration (excuses) tooling: fetching, displaying, and clustering.
 
 use ../meta.nu [pkg-name]
+use ../launchpad.nu [uploader-data]
 use ../../completions.nu [pkg-completions]
-use ../../formatting.nu [osc8-link, lp-bug-link, days-to-duration]
+use ../../formatting.nu [osc8-link, lp-bug-link, days-to-duration, with-spinner]
 use ../../ubuntu-versions.nu [DEVEL_RELEASE]
 use test-results.nu [classify-log-url, format-subtest]
 
@@ -279,18 +280,37 @@ export def excuses [
     }
 
     # Build the test results table for the package itself
-    let autopkgtest = ($data | get -o policy_info.autopkgtest)
-    if ($autopkgtest | is-empty) {
-        print -e "No autopkgtest data available."
+    let rows = (build-autopkgtest-rows ($data | get -o policy_info.autopkgtest | default {}) $all $delineate [])
+    if ($rows | is-empty) {
+        let autopkgtest = ($data | get -o policy_info.autopkgtest)
+        if ($autopkgtest | is-empty) {
+            print -e "No autopkgtest data available."
+        } else {
+            print -e "\(no actionable test results — use -a to show all\)"
+        }
         return []
     }
+    $rows
+}
 
+# Build a table of rows (one per blocking package) for an autopkgtest dict
+# (the `policy_info.autopkgtest` substructure of an excuses entry).
+# Columns: `package`, then one per architecture.
+# Returns [] when there's no data or no actionable rows.
+#
+# - `all`: include non-actionable status rows
+# - `delineate`: refine REGRESSION cells via log fetch
+# - `arches_override`: if non-empty, use these arch columns instead of the
+#   per-package union — useful for cross-package unified rendering.
+def build-autopkgtest-rows [
+    autopkgtest: record
+    all: bool = false
+    delineate: bool = false
+    arches_override: list<string> = []
+]: nothing -> any {
+    if ($autopkgtest | is-empty) { return [] }
     let tests = ($autopkgtest | reject -o verdict | transpose pkg archinfo)
-
-    # Filter to only actionable rows unless --all is set
-    let tests = if $all {
-        $tests
-    } else {
+    let tests = if $all { $tests } else {
         $tests | where {|row|
             $row.archinfo | values | any {|info|
                 let status = ($info | get 0 | default "")
@@ -298,16 +318,11 @@ export def excuses [
             }
         }
     }
+    if ($tests | is-empty) { return [] }
+    let all_arches = if ($arches_override | is-empty) {
+        $tests | get archinfo | each { columns } | flatten | uniq | sort
+    } else { $arches_override }
 
-    if ($tests | is-empty) {
-        print -e "\(no actionable test results — use -a to show all\)"
-        return []
-    }
-
-    # Collect all architectures
-    let all_arches = ($tests | get archinfo | each { columns } | flatten | uniq | sort)
-
-    # If --delineate, collect every refinable cell's log URL and fetch in parallel.
     let refinement = if $delineate {
         let urls = ($tests | each {|row|
             $all_arches | each {|arch|
@@ -322,8 +337,7 @@ export def excuses [
         build-refinement-map $urls
     } else { {} }
 
-    # Build table rows
-    let rows = ($tests | each {|row|
+    $tests | each {|row|
         let base = { package: $row.pkg }
         $all_arches | reduce --fold $base {|arch, acc|
             let info = ($row.archinfo | get -o $arch)
@@ -332,16 +346,168 @@ export def excuses [
             let refined = if ($delineate and ($log_url | is-not-empty)) {
                 $refinement | get -o $log_url | default ""
             } else { "" }
-            let cell = if ($status | is-empty) {
-                ""
-            } else {
+            let cell = if ($status | is-empty) { "" } else {
                 format-status $status $log_url $refined
             }
             $acc | insert $arch $cell
         }
+    }
+}
+
+# Compact verdict mapping for the my-excuses summary table.
+def format-verdict-compact [verdict: string]: nothing -> string {
+    match $verdict {
+        "PASS" => $"(ansi green)migrating(ansi reset)"
+        "REJECTED_PERMANENTLY" => $"(ansi red)blocked(ansi reset)"
+        "REJECTED_TEMPORARILY" => $"(ansi yellow)tmp-block(ansi reset)"
+        "REJECTED_CANNOT_DETERMINE_IF_PERMANENT" => $"(ansi yellow)investigating(ansi reset)"
+        "REJECTED_BLOCKED_BY_ANOTHER_ITEM" => $"(ansi magenta)dep-block(ansi reset)"
+        "REJECTED_WAITING_FOR_ANOTHER_ITEM" => $"(ansi cyan)dep-wait(ansi reset)"
+        _ => $verdict
+    }
+}
+
+# Classify the relationship between the current user and an upload.
+# Returns "uploaded" | "sponsored" | "sponsored-by" | null.
+def classify-role [signer: any, creator: any, me: string]: nothing -> any {
+    let s_match = (($signer | is-not-empty) and ($signer == $me))
+    let c_match = (($creator | is-not-empty) and ($creator == $me))
+    if $s_match and $c_match { return "uploaded" }
+    if $s_match { return "sponsored" }
+    if $c_match { return "sponsored-by" }
+    null
+}
+
+def format-role [role: string]: nothing -> string {
+    match $role {
+        "uploaded" => $"(ansi cyan)uploaded(ansi reset)"
+        "sponsored" => $"(ansi magenta)sponsored(ansi reset)"
+        "sponsored-by" => $"(ansi yellow)sponsored-by(ansi reset)"
+        _ => $role
+    }
+}
+
+# Short human summary of the most relevant blocker(s) for an excuses entry.
+def summarize-issues [entry: record]: nothing -> string {
+    mut parts = []
+    let missing = ($entry | get -o missing-builds.on-architectures | default [])
+    if ($missing | is-not-empty) {
+        $parts = ($parts | append $"missing-builds: ($missing | str join ',')")
+    }
+    let blocked_by = ($entry | get -o dependencies.blocked-by | default [])
+    if ($blocked_by | is-not-empty) {
+        $parts = ($parts | append $"blocked-by: ($blocked_by | str join ',')")
+    }
+    let autopkgtest = ($entry | get -o policy_info.autopkgtest | default {})
+    let at_verdict = ($autopkgtest | get -o verdict | default "PASS")
+    if $at_verdict != "PASS" {
+        let tests = ($autopkgtest | reject -o verdict | transpose pkg archinfo)
+        let regr = ($tests | each {|t|
+            $t.archinfo | values | where {|info|
+                let s = ($info | get 0 | default "")
+                $s == "REGRESSION"
+            } | length
+        } | append 0 | math sum)
+        if $regr > 0 {
+            $parts = ($parts | append $"autopkgtest: ($regr) regr")
+        } else {
+            $parts = ($parts | append "autopkgtest")
+        }
+    }
+    let block_bugs = ($entry | get -o policy_info.block-bugs | default {})
+    let bb_verdict = ($block_bugs | get -o verdict | default "PASS")
+    if $bb_verdict != "PASS" {
+        let n = ($block_bugs | reject -o verdict | columns | length)
+        $parts = ($parts | append $"block-bugs: ($n)")
+    }
+    let hints = ($entry | get -o hints | default [])
+    if ($hints | is-not-empty) {
+        $parts = ($parts | append $"hints: ($hints | length)")
+    }
+    if ($parts | is-empty) { "—" } else { $parts | str join "; " }
+}
+
+# Show proposed-migration excuses for every package YOU uploaded, sponsored,
+# or had sponsored. Cross-references the excuses YAML with LP publication
+# history (cached) to identify your packages by `package_signer_link` /
+# `package_creator_link` matching $env.LAUNCHPAD_NAME (or --user).
+#
+# Default output: summary table (source, version, role, verdict, issues).
+# --detailed: also render the full per-package excuses output for each match.
+# --raw: structured records with `role` and `uploader_data` columns added.
+export def my-excuses [
+    --series (-s): string = $DEVEL_RELEASE  # Ubuntu series
+    --user (-u): string = ""                # LP username (default: $env.LAUNCHPAD_NAME)
+    --detailed (-D)                         # Also render full per-package excuses output
+    --delineate (-d)                        # Refine REGRESSION cells (only with --detailed)
+    --limit (-n): int = 0                   # Cap on excuses sources to query (0 = all). Useful for testing.
+    --raw (-r)                              # Return structured records
+]: nothing -> any {
+    let me = if ($user | is-empty) { $env.LAUNCHPAD_NAME? | default "" } else { $user }
+    if ($me | is-empty) {
+        error make { msg: "No user — pass --user or set $env.LAUNCHPAD_NAME" }
+    }
+
+    let all_sources = (with-spinner $"Fetching excuses for ($series)..." { fetch-excuses $series })
+    let sources = if $limit > 0 { $all_sources | first $limit } else { $all_sources }
+    let n = ($sources | length)
+
+    let candidates = (with-spinner $"Querying LP uploader data for ($n) sources..." {
+        $sources | par-each --threads 16 {|src|
+            let v = ($src | get -o new-version | default "-")
+            if $v == "-" { return null }
+            let ud = (uploader-data $src.source $v)
+            if ($ud | is-empty) { return null }
+            let role = (classify-role $ud.signer $ud.creator $me)
+            if ($role | is-empty) { return null }
+            $src | insert role $role | insert uploader_data $ud
+        } | where { $in != null }
     })
 
-    $rows
+    if ($candidates | is-empty) {
+        print -e $"(ansi yellow)No matching packages for ($me) in ($series).(ansi reset)"
+        return
+    }
+
+    if $raw {
+        return $candidates
+    }
+
+    let summary = ($candidates | each {|c|
+        {
+            source: $c.source
+            "new-version": ($c | get -o new-version)
+            role: (format-role $c.role)
+            verdict: (format-verdict-compact ($c | get migration-policy-verdict))
+            issues: (summarize-issues $c)
+        }
+    })
+
+    print -e $"(ansi attr_bold)my-excuses(ansi reset) — (ansi cyan)($candidates | length)(ansi reset) packages for (ansi cyan)($me)(ansi reset) in (ansi yellow)($series)(ansi reset)"
+
+    if not $detailed {
+        return $summary
+    }
+
+    # Detailed: print summary table to stderr, return one unified autopkgtest
+    # table with a `blocked-package` column at the front.
+    print -e ($summary | table --expand)
+    print -e ""
+
+    let global_arches = ($candidates | each {|c|
+        let at = ($c | get -o policy_info.autopkgtest | default {})
+        if ($at | is-empty) { [] } else {
+            $at | reject -o verdict | values | each { columns } | flatten | uniq
+        }
+    } | flatten | uniq | sort)
+
+    let unified = ($candidates | each {|c|
+        let at = ($c | get -o policy_info.autopkgtest | default {})
+        let rows = (build-autopkgtest-rows $at false $delineate $global_arches)
+        $rows | each {|r| { "blocked-package": $c.source } | merge $r }
+    } | flatten)
+
+    $unified
 }
 
 # Show the largest co-migration clusters currently blocking proposed migration.
