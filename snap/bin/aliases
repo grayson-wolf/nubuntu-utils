@@ -4,7 +4,22 @@
 set -euo pipefail
 
 SNAP_NAME="nubuntu-utils"
-APPS=(excuses excuses-clusters archive-tests retry-regressions sru-list poc revdeps dep-components p q pkg spawn ephemeral lppush buildin cpbd dch-bump getdeps images lxc-reap lxc-reap-all tarme testin testurl test-urls withgit nubuntu-shell)
+
+# Derive APPS from the installed snap (single source of truth — the
+# snapcraft.yaml `apps:` block). Exclude the alias manager itself to avoid
+# shadowing the shell `alias` builtin.
+mapfile -t APPS < <(
+    snap apps "$SNAP_NAME" 2>/dev/null \
+        | tail -n +2 \
+        | awk -v sn="$SNAP_NAME." '{ sub("^"sn, "", $1); print $1 }' \
+        | grep -vx aliases \
+        | sort
+)
+
+if [ "${#APPS[@]}" -eq 0 ]; then
+    echo "No $SNAP_NAME apps found (is the snap installed?)" >&2
+    exit 1
+fi
 
 # Use snap-bundled gum
 GUM="${SNAP}/usr/bin/gum"
