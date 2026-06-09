@@ -4,6 +4,7 @@ use ../meta.nu [pkg-name]
 use ../../completions.nu [pkg-completions]
 use ../../formatting.nu [osc8-link, lp-bug-link, days-to-duration]
 use ../../ubuntu-versions.nu [DEVEL_RELEASE]
+use test-results.nu [classify-log-url, format-subtest]
 
 const EXCUSES_URL = "https://ubuntu-archive-team.ubuntu.com/proposed-migration"
 
@@ -15,11 +16,16 @@ export def fetch-excuses [series: string]: nothing -> table {
 }
 
 # Format an autopkgtest status with color and OSC8 hyperlink.
-def format-status [status: string, log_url: string]: nothing -> string {
-    let display = match $status {
+# If `refined` is non-empty and the britney status is a failure-bearing one
+# (REGRESSION), the refined classification from the log is used
+# instead (Deps, Timeout, Stderr, Broken, Temp Fail, etc.). When britney says
+# REGRESSION but the log parses as PASS the refined value is shown with a `?`
+# suffix to flag the inconsistency.
+def format-status [status: string, log_url: string, refined: string = ""]: nothing -> string {
+    let coarse_display = match $status {
         "PASS" => "Pass"
         "OLD_PASS" => "Pass°"
-        "REGRESSION" => "Regr ♻"
+        "REGRESSION" => "Regr"
         "RUNNING" => "Run..."
         "RUNNING-ALWAYSFAIL" => "Run*"
         "RUNNING-REFERENCE" => "Run°"
@@ -29,15 +35,40 @@ def format-status [status: string, log_url: string]: nothing -> string {
         "IGNORE-FAIL" => "Ign"
         _ => $status
     }
-    let colored = match $status {
-        "PASS" | "OLD_PASS" => $"(ansi green)($display)(ansi reset)"
-        "REGRESSION" => $"(ansi red)($display)(ansi reset)"
-        "RUNNING" | "RUNNING-ALWAYSFAIL" | "RUNNING-REFERENCE" => $"(ansi yellow)($display)(ansi reset)"
-        "ALWAYSFAIL" | "NEUTRAL" | "OLD_NEUTRAL" | "IGNORE-FAIL" => $"(ansi dark_gray)($display)(ansi reset)"
-        _ => $display
+    let use_refined = (
+        ($refined | is-not-empty)
+        and ($status in ["REGRESSION", "ALWAYSFAIL"])
+    )
+    let body = if $use_refined {
+        if ($status == "REGRESSION") and ($refined == "PASS") {
+            $"(ansi yellow_bold)Regr?(ansi reset)"
+        } else {
+            format-subtest $refined
+        }
+    } else {
+        let coarse_colored = match $status {
+            "PASS" | "OLD_PASS" => $"(ansi green)($coarse_display)(ansi reset)"
+            "REGRESSION" => $"(ansi red)($coarse_display)(ansi reset)"
+            "RUNNING" | "RUNNING-ALWAYSFAIL" | "RUNNING-REFERENCE" => $"(ansi yellow)($coarse_display)(ansi reset)"
+            "ALWAYSFAIL" | "NEUTRAL" | "OLD_NEUTRAL" | "IGNORE-FAIL" => $"(ansi dark_gray)($coarse_display)(ansi reset)"
+            _ => $coarse_display
+        }
+        $coarse_colored
     }
     let link_url = if $log_url == "https://autopkgtest.ubuntu.com/running" { "" } else { $log_url }
-    osc8-link $link_url $colored
+    osc8-link $link_url $body
+}
+
+# Statuses for which we'd want to fetch the log and refine the classification.
+const REFINABLE_STATUSES = ["REGRESSION"]
+
+# Given a list of unique log URLs, fetch and classify each in parallel.
+# Returns a record { <url>: <overall_status> }.
+def build-refinement-map [log_urls: list<string>]: nothing -> record {
+    let urls = ($log_urls | where { $in | is-not-empty } | uniq)
+    if ($urls | is-empty) { return {} }
+    let pairs = ($urls | par-each {|u| { url: $u, overall: (classify-log-url $u) } })
+    $pairs | reduce --fold {} {|p, acc| $acc | insert $p.url $p.overall }
 }
 
 # Statuses that indicate a problem or potential problem requiring attention.
@@ -52,6 +83,7 @@ export def excuses [
     --raw (-r)                                         # Output raw parsed YAML record
     --all (-a)                                         # Show all test results, not just actionable ones
     --why (-w)                                         # Show blocking dependencies' test results
+    --delineate (-d)                                   # Refine REGRESSION cells with log-derived failure mode (real-fail / timeout / tmpfail / badpkg / broken)
 ]: nothing -> table {
     let pkg = $package | default (pkg-name)
 
@@ -214,13 +246,32 @@ export def excuses [
         }
 
         let all_arches = ($all_rows | get archinfo | each { columns } | flatten | uniq | sort)
+
+        # If --delineate, collect every refinable cell's log URL and fetch in parallel.
+        let refinement = if $delineate {
+            let urls = ($all_rows | each {|row|
+                $all_arches | each {|arch|
+                    let info = ($row.archinfo | get -o $arch)
+                    if ($info | is-not-empty) {
+                        let status = ($info | get 0 | default "")
+                        let log_url = ($info | get 1 | default "")
+                        if ($status in $REFINABLE_STATUSES) { $log_url } else { null }
+                    } else { null }
+                }
+            } | flatten | where { $in != null })
+            build-refinement-map $urls
+        } else { {} }
+
         let rows = ($all_rows | each {|row|
             let base = { blocker: $row.blocker, package: $row.pkg }
             $all_arches | reduce --fold $base {|arch, acc|
                 let info = ($row.archinfo | get -o $arch)
                 let status = if ($info | is-not-empty) { $info | get 0 | default "" } else { "" }
                 let log_url = if ($info | is-not-empty) { $info | get 1 | default "" } else { "" }
-                let cell = if ($status | is-empty) { "" } else { format-status $status $log_url }
+                let refined = if ($delineate and ($log_url | is-not-empty)) {
+                    $refinement | get -o $log_url | default ""
+                } else { "" }
+                let cell = if ($status | is-empty) { "" } else { format-status $status $log_url $refined }
                 $acc | insert $arch $cell
             }
         })
@@ -256,6 +307,21 @@ export def excuses [
     # Collect all architectures
     let all_arches = ($tests | get archinfo | each { columns } | flatten | uniq | sort)
 
+    # If --delineate, collect every refinable cell's log URL and fetch in parallel.
+    let refinement = if $delineate {
+        let urls = ($tests | each {|row|
+            $all_arches | each {|arch|
+                let info = ($row.archinfo | get -o $arch)
+                if ($info | is-not-empty) {
+                    let status = ($info | get 0 | default "")
+                    let log_url = ($info | get 1 | default "")
+                    if ($status in $REFINABLE_STATUSES) { $log_url } else { null }
+                } else { null }
+            }
+        } | flatten | where { $in != null })
+        build-refinement-map $urls
+    } else { {} }
+
     # Build table rows
     let rows = ($tests | each {|row|
         let base = { package: $row.pkg }
@@ -263,10 +329,13 @@ export def excuses [
             let info = ($row.archinfo | get -o $arch)
             let status = if ($info | is-not-empty) { $info | get 0 | default "" } else { "" }
             let log_url = if ($info | is-not-empty) { $info | get 1 | default "" } else { "" }
+            let refined = if ($delineate and ($log_url | is-not-empty)) {
+                $refinement | get -o $log_url | default ""
+            } else { "" }
             let cell = if ($status | is-empty) {
                 ""
             } else {
-                format-status $status $log_url
+                format-status $status $log_url $refined
             }
             $acc | insert $arch $cell
         }

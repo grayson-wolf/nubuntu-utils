@@ -10,7 +10,7 @@ use ../meta.nu [pkg-name]
 const AUTOPKGTEST_URL = "https://autopkgtest.ubuntu.com"
 
 # Format an autopkgtest subtest status with color (no emoji).
-def format-subtest [status: string]: nothing -> string {
+export def format-subtest [status: string]: nothing -> string {
     let display = match $status {
         "PASS" => "Pass"
         "PASS_SUPERFICIAL" => "Pass*"
@@ -46,7 +46,7 @@ def detect-kind [log: string]: nothing -> string {
 
 # Parse a decompressed autopkgtest log into status + subtests + kind.
 # Returns {kind: "base"|"proposed", overall: string, subtests: list<{name, status}>}
-def parse-autopkgtest-log [log: string]: nothing -> record {
+export def parse-autopkgtest-log [log: string]: nothing -> record {
     if ($log | is-empty) {
         return { kind: "base", overall: "BAD", subtests: [] }
     }
@@ -98,18 +98,52 @@ def parse-autopkgtest-log [log: string]: nothing -> record {
 
     let overall = if $testbed_failure {
         "TMPFAIL"
-    } else if ($subtests | where status in ["FAIL" "FAIL_BADPKG" "FAIL_TIMEOUT" "FAIL_STDERR" "BROKEN"] | is-not-empty) {
-        "FAIL"
     } else if ($subtests | is-empty) {
         "BAD"
     } else {
-        "PASS"
+        let fails = ($subtests | get status)
+        if "FAIL" in $fails { "FAIL"
+        } else if "FAIL_STDERR" in $fails { "FAIL_STDERR"
+        } else if "FAIL_TIMEOUT" in $fails { "FAIL_TIMEOUT"
+        } else if "BROKEN" in $fails { "BROKEN"
+        } else if "FAIL_BADPKG" in $fails { "FAIL_BADPKG"
+        } else { "PASS" }
     }
 
     # Detect base vs proposed: --all-proposed adds proposed pocket to the testbed
     let kind = (detect-kind ($summary_split | first))
 
     { kind: $kind, overall: $overall, subtests: $subtests }
+}
+
+# Convert various autopkgtest URL forms to the raw log.gz URL.
+# Accepts:
+#   - already-raw `…/results/.../log.gz` URL (returned unchanged)
+#   - run-page URL `…/packages/<pkg>/<series>/<arch>/<run_id>@`
+# Returns "" if the URL doesn't match a known pattern.
+export def to-log-url [url: string]: nothing -> string {
+    if ($url | is-empty) { return "" }
+    if ($url | str ends-with "log.gz") { return $url }
+    # Match a run-page URL like
+    # https://autopkgtest.ubuntu.com/packages/<pkg>/<series>/<arch>/<run_id>@[/]
+    let m = ($url | parse -r '/packages/(?P<pkg>[^/]+)/(?P<series>[^/]+)/(?P<arch>[^/]+)/(?P<run>[^/@]+)@?/?$')
+    if ($m | is-empty) { return "" }
+    let r = ($m | first)
+    let prefix = (package-prefix $r.pkg)
+    $"($AUTOPKGTEST_URL)/results/autopkgtest-($r.series)/($r.series)/($r.arch)/($prefix)/($r.pkg)/($r.run)@/log.gz"
+}
+
+# Fetch a gzipped autopkgtest log and return its overall classification string.
+# Accepts both raw log URLs and run-page URLs.
+# Returns "" if the URL is empty / unrecognised / the fetch fails.
+export def classify-log-url [log_url: string]: nothing -> string {
+    let resolved = (to-log-url $log_url)
+    if ($resolved | is-empty) { return "" }
+    let result = (^curl -sf $resolved | complete)
+    if $result.exit_code != 0 { return "" }
+    let decoded = ($result.stdout | ^gzip -d | complete)
+    if $decoded.exit_code != 0 { return "" }
+    (parse-autopkgtest-log $decoded.stdout).overall
 }
 
 # Parse a listing-line timestamp like "20260608_160510_abc123" → datetime.
