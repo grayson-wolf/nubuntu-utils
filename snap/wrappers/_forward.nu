@@ -20,5 +20,10 @@ def --wrapped main [cmd: string, ...args: string]: nothing -> any {
             $a
         }
     } | str join ' ')
-    nu --include-path ($env.SNAP? | default ".") -c $"use nubuntu-utils/ *; ($cmd) ($argstr)"
+    let nu_bin = if ($env.SNAP? | is-not-empty) {
+        $"($env.SNAP)/bin/nu"
+    } else {
+        "nu"
+    }
+    ^$nu_bin --include-path ($env.SNAP? | default ".") -c $"use nubuntu-utils/ *; ($cmd) ($argstr)"
 }
