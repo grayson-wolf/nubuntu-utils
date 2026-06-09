@@ -56,7 +56,7 @@ export def getdeps []: nothing -> nothing {
 export def gen-ppa-name []: nothing -> string {
     let pkg_name = pkg-name
     let changes_hash = sha256sum ../*.changes | str substring 0..7
-    $"($pkg_name)-(pkg-release)-($changes_hash)"
+    $"($pkg_name)-(pkg-release)-($changes_hash)" | str downcase
 }
 
 # Generate autopkgtest request URLs for the current package's PPA upload.
