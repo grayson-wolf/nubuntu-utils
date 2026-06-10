@@ -88,8 +88,12 @@ export def excuses [
     --raw (-r)                                         # Output raw parsed YAML record
     --all (-a)                                         # Show all test results, not just actionable ones
     --why (-w)                                         # Refine REGRESSION cells with log-derived failure mode (real-fail / timeout / tmpfail / badpkg / broken)
+    --failing (-f)                                     # Only rows with a real test regression (implies -w)
     --dependencies (-d)                                # Show blocking dependencies' test results
 ]: nothing -> table {
+    # --failing implies --why
+    let why = ($why or $failing)
+
     let pkg = $package | default (pkg-name)
 
     let sources = with-spinner $"Fetching excuses for ($series)..." { fetch-excuses $series }
@@ -226,66 +230,39 @@ export def excuses [
             print -e "No blocking dependencies to investigate."
             return []
         }
-        let all_rows = ($dep_pkgs | each {|dep_pkg|
-            let dep_data = ($sources | where source == $dep_pkg)
-            if ($dep_data | is-empty) { return [] }
-            let dep_entry = ($dep_data | first)
-            let autopkgtest = ($dep_entry | get -o policy_info.autopkgtest | default {})
-            if ($autopkgtest | is-empty) { return [] }
-            let tests = ($autopkgtest | reject -o verdict | transpose pkg archinfo)
-            let tests = if $all { $tests } else {
-                $tests | where {|row|
-                    $row.archinfo | values | any {|info|
-                        let status = ($info | get 0 | default "")
-                        $status in $ACTIONABLE_STATUSES
-                    }
-                }
+        # Resolve each dep to its autopkgtest substructure; drop deps with none.
+        let dep_entries = ($dep_pkgs | each {|dep_pkg|
+            let d = ($sources | where source == $dep_pkg)
+            if ($d | is-empty) { null } else {
+                let at = ($d | first | get -o policy_info.autopkgtest | default {})
+                if ($at | is-empty) { null } else { { pkg: $dep_pkg, at: $at } }
             }
-            $tests | each {|row|
-                { blocker: $dep_pkg, pkg: $row.pkg, archinfo: $row.archinfo }
-            }
-        } | flatten)
+        } | where { $in != null })
 
-        if ($all_rows | is-empty) {
-            print -e "\(no actionable test results in blocking dependencies\)"
+        if ($dep_entries | is-empty) {
+            print -e "\(no test data in blocking dependencies\)"
             return []
         }
 
-        let all_arches = ($all_rows | get archinfo | each { columns } | flatten | uniq | sort)
+        # Union of arches across all deps so cross-package rows align.
+        let all_arches = ($dep_entries | each {|e|
+            $e.at | reject -o verdict | values | each { columns } | flatten
+        } | flatten | uniq | sort)
 
-        # If --why, collect every refinable cell's log URL and fetch in parallel.
-        let refinement = if $why {
-            let urls = ($all_rows | each {|row|
-                $all_arches | each {|arch|
-                    let info = ($row.archinfo | get -o $arch)
-                    if ($info | is-not-empty) {
-                        let status = ($info | get 0 | default "")
-                        let log_url = ($info | get 1 | default "")
-                        if ($status in $REFINABLE_STATUSES) { $log_url } else { null }
-                    } else { null }
-                }
-            } | flatten | where { $in != null })
-            build-refinement-map $urls
-        } else { {} }
+        let rows = ($dep_entries | each {|e|
+            build-autopkgtest-rows $e.at $all $why $all_arches $failing
+                | each {|r| { blocker: $e.pkg } | merge $r }
+        } | flatten)
 
-        let rows = ($all_rows | each {|row|
-            let base = { blocker: $row.blocker, package: $row.pkg }
-            $all_arches | reduce --fold $base {|arch, acc|
-                let info = ($row.archinfo | get -o $arch)
-                let status = if ($info | is-not-empty) { $info | get 0 | default "" } else { "" }
-                let log_url = if ($info | is-not-empty) { $info | get 1 | default "" } else { "" }
-                let refined = if ($why and ($log_url | is-not-empty)) {
-                    $refinement | get -o $log_url | default ""
-                } else { "" }
-                let cell = if ($status | is-empty) { "" } else { format-status $status $log_url $refined }
-                $acc | insert $arch $cell
-            }
-        })
+        if ($rows | is-empty) {
+            print -e "\(no actionable test results in blocking dependencies\)"
+            return []
+        }
         return $rows
     }
 
     # Build the test results table for the package itself
-    let rows = (build-autopkgtest-rows ($data | get -o policy_info.autopkgtest | default {}) $all $why [])
+    let rows = (build-autopkgtest-rows ($data | get -o policy_info.autopkgtest | default {}) $all $why [] $failing)
     if ($rows | is-empty) {
         let autopkgtest = ($data | get -o policy_info.autopkgtest)
         if ($autopkgtest | is-empty) {
