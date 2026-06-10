@@ -14,7 +14,7 @@ export def ppa-completions []: nothing -> list<string> {
 
 # Locally-cloned package names from $NUBUNTU_PKGS_DIR (default ~/pkgs/)
 export def pkg-completions []: nothing -> list<string> {
-    let pkgs_dir = ($env.NUBUNTU_PKGS_DIR? | default "~/pkgs" | path expand)
+    let pkgs_dir = ($env.NUBUNTU_PKGS_DIR | path expand)
     if not ($pkgs_dir | path exists) { return [] }
     ls $pkgs_dir | where type == dir | get name | each { path basename }
 }

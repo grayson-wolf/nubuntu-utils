@@ -16,7 +16,7 @@ export def --env pkg [
     package: string@pkg-completions # the name of the package to fetch or go to
     --refetch (-r) # Force-remove and refetch the package
 ]: nothing -> nothing {
-    let pkgs_root = ($env.NUBUNTU_PKGS_DIR? | default "~/pkgs" | path expand)
+    let pkgs_root = ($env.NUBUNTU_PKGS_DIR | path expand)
     let pkg_dir = ($pkgs_root | path join $package $package)
 
     if $refetch {
