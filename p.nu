@@ -50,17 +50,13 @@ export def up [
     --security (-s) # Use the security pocket
     --backports (-b) # Use the backports pocket
 ]: nothing -> nothing {
-    let ppa_path = $"($env.LAUNCHPAD_NAME)/($ppa_name)"
-    if $proposed {
-        ppa create $ppa_name --pocket proposed
-    } else if $security {
-        ppa create $ppa_name --pocket security
-    } else if $backports {
-        ppa create $ppa_name --pocket backports
-    } else {
-        ppa create $ppa_name
-    }
-    dput $"ppa:($env.LAUNCHPAD_NAME)/($ppa_name)" ../*.changes
+    let ppa_path = (normalize-ppa-name $ppa_name)
+    let pocket_args = if $proposed { [--pocket proposed] }
+        else if $security { [--pocket security] }
+        else if $backports { [--pocket backports] }
+        else { [] }
+    ppa create $ppa_name ...$pocket_args
+    dput $"ppa:($ppa_path)" ../*.changes
     ppa wait $ppa_path
 
     # Auto-submit autopkgtest requests via cookie
@@ -94,7 +90,7 @@ export def reap [
 ]: nothing -> list<string> {
     let pkg = $name | default (pkg-name)
 
-    ppa list | lines | where $it =~ $pkg | each {|entry|
+    ppa list | lines | where {|x| $x =~ $pkg } | each {|entry|
         ppa destroy $entry | ignore
         $entry
     }
