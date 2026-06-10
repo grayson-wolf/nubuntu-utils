@@ -1,6 +1,7 @@
 # Building source packages and managing build artifacts
 
 use meta.nu [target-release, pkg-upstream-version, pkg-version, pkg-name]
+use launchpad.nu [normalize-ppa-name]
 use ../completions.nu [release-completions]
 use ../ubuntu-versions.nu [ARCHES]
 
@@ -85,7 +86,7 @@ export def test-urls [
     }
 
     let trigger = $"($pkg_name)/($version)" | url encode
-    let ppa_param = $"($env.LAUNCHPAD_NAME)/($ppa)" | url encode
+    let ppa_param = (normalize-ppa-name $ppa) | url encode
 
     mut urls = []
     for arch in $arches {
