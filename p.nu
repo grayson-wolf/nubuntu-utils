@@ -158,7 +158,7 @@ export def tests [
     --raw (-r)                              # Return structured records with full subtest data
 ]: nothing -> any {
     let resolved = if ($ppa_name | is-empty) {
-        gen-ppa-name
+        normalize-ppa-name (gen-ppa-name)
     } else {
         normalize-ppa-name $ppa_name
     }
