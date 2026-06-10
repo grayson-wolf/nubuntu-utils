@@ -3,7 +3,7 @@
 use ../meta.nu [pkg-name]
 use ../launchpad.nu [uploader-data]
 use ../../completions.nu [pkg-completions]
-use ../../formatting.nu [osc8-link, lp-bug-link, days-to-duration, with-spinner]
+use ../../formatting.nu [osc8-link, lp-bug-link, days-to-duration, with-spinner, version-delta]
 use ../../ubuntu-versions.nu [DEVEL_RELEASE]
 use log-parsing.nu [classify-log-url, format-subtest]
 
@@ -122,7 +122,8 @@ export def excuses [
     let age_dur = if ($age | describe) == "string" { $age } else { (days-to-duration $age) }
     let age_req_dur = if ($age_req | describe) == "string" { $age_req } else if $age_req == 0 { "none" } else { (days-to-duration $age_req) | into string }
 
-    print -e $"(ansi attr_bold)($pkg)(ansi reset): ($old_ver) → ($new_ver)"
+    let vd = (version-delta $old_ver $new_ver)
+    print -e $"(ansi attr_bold)($pkg)(ansi reset): ($vd.old) → ($vd.new)"
     print -e $"Status: ($verdict_display) | Age: ($age_dur) \(required: ($age_req_dur)\)"
 
     # Show dependency info when present

@@ -1,7 +1,7 @@
 # SRU (Stable Release Update) tracking commands
 
 use ../completions.nu [release-completions]
-use ../formatting.nu [osc8-link, days-to-duration, with-spinner]
+use ../formatting.nu [osc8-link, days-to-duration, with-spinner, version-delta]
 use ../ubuntu-versions.nu [LATEST_STABLE_RELEASE]
 
 const SRU_REPORT_URL = "https://ubuntu-archive-team.ubuntu.com/sru_report.yaml"
@@ -58,12 +58,30 @@ export def sru-list [
         let bugs_formatted = ($entry.bugs | each {|bug| format-bug $bug } | str join " ")
         let age_dur = (days-to-duration $entry.age)
 
+        let r = ($entry | get -o release_version | default "")
+        let u = ($entry | get -o update_version | default "")
+        let p = ($entry | get -o proposed_version | default "")
+
+        let cols = if ($u | is-not-empty) and ($p | is-not-empty) {
+            # 3-way: release de-emphasized vs updates (gray diff), updates/proposed red/green.
+            let ru = (version-delta $r $u --old-color dark_gray)
+            let up = (version-delta $u $p)
+            { "-release": $ru.old, "-updates": $up.old, "-proposed": $up.new }
+        } else if ($p | is-not-empty) {
+            # First SRU: no -updates yet, normal two-way delta between release and proposed.
+            let rp = (version-delta $r $p)
+            { "-release": $rp.old, "-updates": "", "-proposed": $rp.new }
+        } else {
+            # No SRU in flight: leave plain.
+            { "-release": $r, "-updates": $u, "-proposed": $p }
+        }
+
         let base = {
             package: $entry.pkg
             age: $age_dur
-            "-release": ($entry | get -o release_version | default "")
-            "-updates": ($entry | get -o update_version | default "")
-            "-proposed": ($entry | get -o proposed_version | default "")
+            "-release": $cols."-release"
+            "-updates": $cols."-updates"
+            "-proposed": $cols."-proposed"
             signer: ($entry | get -o uploaders | default "")
             creator: ($entry | get -o creator | default "")
             bugs: $bugs_formatted

@@ -107,3 +107,47 @@ export def with-spinner [title: string, work: closure]: any -> any {
     "\r\e[K" | save --append --raw /dev/tty
     $result
 }
+
+# Color the differing tail of two version strings.
+#
+# Finds the longest common prefix, then colors everything from the first
+# point of divergence to the end of each string. We deliberately do NOT
+# also compute a common suffix: Debian versions often have a "noise tail"
+# (`-1`, `+ds-1`, ~ppa1) that a suffix-match would latch onto, visually
+# fragmenting the changed region. Reading left-to-right, "from here to the
+# end is the new value" is the model.
+#
+# If the inputs are identical, both are returned unchanged.
+# Colors are nu `ansi` color names; default red (old) / green (new).
+export def version-delta [
+    old: string
+    new: string
+    --old-color: string = "red"
+    --new-color: string = "green"
+]: nothing -> record<old: string, new: string> {
+    if $old == $new {
+        return { old: $old, new: $new }
+    }
+    let oc = ($old | split chars)
+    let nc = ($new | split chars)
+    let max_pref = ([($oc | length) ($nc | length)] | math min)
+
+    mut p = 0
+    while $p < $max_pref and ($oc | get $p) == ($nc | get $p) { $p = $p + 1 }
+
+    let pref = ($oc | first $p | str join)
+    let old_tail = ($oc | skip $p | str join)
+    let new_tail = ($nc | skip $p | str join)
+
+    let old_colored = if ($old_tail | is-empty) {
+        $pref
+    } else {
+        $"($pref)(ansi $old_color)($old_tail)(ansi reset)"
+    }
+    let new_colored = if ($new_tail | is-empty) {
+        $pref
+    } else {
+        $"($pref)(ansi $new_color)($new_tail)(ansi reset)"
+    }
+    { old: $old_colored, new: $new_colored }
+}
