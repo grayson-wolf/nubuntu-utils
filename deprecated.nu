@@ -3,7 +3,7 @@
 
 use p.nu
 use q.nu
-use packaging/workspace.nu [pkg]
+use packaging/navigation.nu [pkg]
 use completions.nu [ppa-completions]
 
 # Legacy alias for `pkg`

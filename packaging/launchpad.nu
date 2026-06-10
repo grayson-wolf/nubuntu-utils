@@ -85,3 +85,15 @@ export def uploader-data [
         sponsor:    (lp-user-from-link ($pub | get -o sponsor_link))
     }
 }
+
+# Normalize a PPA name to owner/name format.
+# Accepts: bare name, owner/name, or ppa:owner/name.
+export def normalize-ppa-name [ppa_name: string]: nothing -> string {
+    if ($ppa_name | str starts-with "ppa:") {
+        $ppa_name | str replace "ppa:" ""
+    } else if ("/" in $ppa_name) {
+        $ppa_name
+    } else {
+        $"($env.LAUNCHPAD_NAME)/($ppa_name)"
+    }
+}

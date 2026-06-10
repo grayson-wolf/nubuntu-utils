@@ -5,7 +5,7 @@ use ../launchpad.nu [uploader-data]
 use ../../completions.nu [pkg-completions]
 use ../../formatting.nu [osc8-link, lp-bug-link, days-to-duration, with-spinner]
 use ../../ubuntu-versions.nu [DEVEL_RELEASE]
-use test-results.nu [classify-log-url, format-subtest]
+use log-parsing.nu [classify-log-url, format-subtest]
 
 const EXCUSES_URL = "https://ubuntu-archive-team.ubuntu.com/proposed-migration"
 

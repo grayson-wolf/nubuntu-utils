@@ -4,5 +4,8 @@
 
 export use migration.nu *
 export use autopkgtest.nu *
-export use test-results.nu *
+export use log-parsing.nu *
+export use fetch.nu *
+export use render.nu *
+export use archive.nu *
 export use commands.nu *

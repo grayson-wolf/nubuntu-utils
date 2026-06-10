@@ -1,0 +1,193 @@
+# Fetchers for autopkgtest runs from various sources.
+# All return rows shaped like {source, arch, kind, time, log_url, overall, subtests}
+# so they can be unioned and rendered uniformly.
+
+use log-parsing.nu [AUTOPKGTEST_URL, fetch-and-parse-logs, package-prefix]
+
+# Fetch and parse all available test runs for a (series, owner, ppa).
+# Returns table<source, arch, kind, time, log_url, overall, subtests>
+# Keeps up to `max_per_arch` most recent runs per (source, arch) before downloading logs.
+export def fetch-ppa-test-runs [
+    series: string
+    owner: string
+    ppa: string
+    max_per_arch: int = 4
+    arches: list<string> = []  # empty = all
+]: nothing -> table {
+    let base = $"($AUTOPKGTEST_URL)/results/autopkgtest-($series)-($owner)-($ppa)/"
+
+    # 1. Fetch the listing
+    let listing_text = (do --ignore-errors { http get $"($base)?format=plain" } | default "")
+    if ($listing_text | is-empty) { return [] }
+
+    # 2. Parse listing into {arch, source, stamp, log_url}, filter by arch if requested
+    let entries = (
+        $listing_text
+        | lines
+        | where { ($in | str ends-with "log.gz") and ($in | is-not-empty) }
+        | each {|line|
+            let parts = ($line | split row "/")
+            if ($parts | length) < 6 { null } else {
+                {
+                    arch:    ($parts | get 1)
+                    source:  ($parts | get 3)
+                    stamp:   ($parts | get 4)
+                    log_url: $"($base)($line)"
+                }
+            }
+        }
+        | where { $in != null }
+        | where { ($arches | is-empty) or ($in.arch in $arches) }
+    )
+    if ($entries | is-empty) { return [] }
+
+    # 3. Keep top N most recent per (source, arch)
+    let latest = (
+        $entries
+        | sort-by stamp --reverse
+        | group-by --to-table { |r| $"($r.source)|($r.arch)" }
+        | each {|g| $g.items | first $max_per_arch }
+        | flatten
+    )
+
+    # 4. Parallel fetch + parse each log
+    $latest | fetch-and-parse-logs
+}
+
+# Common row builder for pending (running/waiting) autopkgtest jobs.
+# Detects proposed-pocket via the "/migration-reference" trigger marker and
+# produces a record shaped like fetch-ppa-test-runs output.
+def make-pending-row [
+    source: string
+    arch: string
+    triggers: list<string>
+    time: datetime
+    overall: string
+]: nothing -> record {
+    let proposed = ($triggers | any { $in | str contains "/migration-reference" })
+    {
+        source:   $source
+        arch:     $arch
+        kind:     (if $proposed { "proposed" } else { "base" })
+        time:     $time
+        log_url:  $"($AUTOPKGTEST_URL)/running"
+        overall:  $overall
+        subtests: []
+    }
+}
+
+# Fetch currently running autopkgtest jobs for a PPA.
+# Returns rows shaped like fetch-ppa-test-runs output (source, arch, kind,
+# time, log_url, overall=RUNNING, subtests=[]), so render-tests-tables can
+# display them alongside finished runs.
+export def fetch-ppa-running [
+    series: string
+    owner: string
+    ppa: string
+    arches: list<string> = []  # empty = all
+]: nothing -> table {
+    let ppa_id = $"($owner)/($ppa)"
+    let data = (do --ignore-errors { http get $"($AUTOPKGTEST_URL)/static/running.json" } | default {})
+    if ($data | is-empty) { return [] }
+    let now = (date now)
+    $data
+    | transpose pkg jobs
+    | each {|p|
+        $p.jobs | transpose handle codenames | each {|h|
+            $h.codenames | transpose codename arches | each {|c|
+                if $c.codename != $series { return [] }
+                $c.arches | transpose arch info | each {|a|
+                    let jobinfo = ($a.info | get -o 0 | default {})
+                    let ppas = ($jobinfo | get -o ppas | default [])
+                    if $ppa_id not-in $ppas { return null }
+                    if (not ($arches | is-empty)) and ($a.arch not-in $arches) { return null }
+                    # info[1] is elapsed-seconds-since-submission, not a unix epoch.
+                    let elapsed = ($a.info | get -o 1 | default 0 | into int)
+                    let triggers = ($jobinfo | get -o triggers | default [])
+                    make-pending-row $p.pkg $a.arch $triggers ($now - ($elapsed * 1sec)) "RUNNING"
+                } | where { $in != null }
+            } | flatten
+        } | flatten
+    } | flatten
+}
+
+# Fetch queued (waiting) autopkgtest jobs for a PPA. Same row shape as
+# fetch-ppa-running but with overall=WAITING.
+export def fetch-ppa-waiting [
+    series: string
+    owner: string
+    ppa: string
+    arches: list<string> = []
+]: nothing -> table {
+    let ppa_id = $"($owner)/($ppa)"
+    let data = (do --ignore-errors { http get $"($AUTOPKGTEST_URL)/queues.json" } | default {})
+    if ($data | is-empty) { return [] }
+    # Shape: {queue: {codename: {arch: [ {package, triggers, submit-time, ppas?}, ... ]}}}
+    # PPA jobs live under the "ppa" queue; "ubuntu" entries lack the ppas field.
+    let ppa_queue = ($data | get -o ppa | default {})
+    if ($ppa_queue | is-empty) { return [] }
+    $ppa_queue
+    | transpose codename arches
+    | each {|c|
+        if $c.codename != $series { return [] }
+        $c.arches | transpose arch entries | each {|a|
+            if (not ($arches | is-empty)) and ($a.arch not-in $arches) { return [] }
+            $a.entries | each {|e|
+                let ppas = ($e | get -o ppas | default [])
+                if $ppa_id not-in $ppas { return null }
+                let pkg = ($e | get -o package | default "")
+                if ($pkg | is-empty) { return null }
+                let triggers = ($e | get -o triggers | default [])
+                let submit_str = ($e | get -o submit-time | default "")
+                let submit_time = if ($submit_str | is-empty) {
+                    (date now)
+                } else {
+                    try { $submit_str | into datetime } catch { (date now) }
+                }
+                make-pending-row $pkg $a.arch $triggers $submit_time "WAITING"
+            } | where { $in != null }
+        } | flatten
+    } | flatten
+}
+
+# Fetch and parse archive autopkgtest runs for a (series, package) across the
+# given arches. Scrapes the per-arch HTML listing page since the swift container
+# does not support ?format=plain for the main archive containers.
+# Returns the same shape as `fetch-ppa-test-runs`.
+export def fetch-archive-test-runs [
+    series: string
+    package: string
+    arches: list<string>
+    max_per_arch: int = 4
+]: nothing -> table {
+    let prefix = (package-prefix $package)
+    let log_base = $"($AUTOPKGTEST_URL)/results/autopkgtest-($series)/($series)"
+
+    let entries = (
+        $arches | par-each {|arch|
+            let page_url = $"($AUTOPKGTEST_URL)/packages/($prefix)/($package)/($series)/($arch)"
+            let html = (do --ignore-errors { http get $page_url } | default "")
+            if ($html | is-empty) { [] } else {
+                # Extract run IDs (YYYYMMDD_HHMMSS_<hash>), keep unique in
+                # appearance order. Page lists most-recent first.
+                let ids = (
+                    $html
+                    | parse -r '(?P<id>\d{8}_\d{6}_[a-z0-9]+)'
+                    | get id
+                    | uniq
+                    | first $max_per_arch
+                )
+                $ids | each {|id|
+                    {
+                        arch:    $arch
+                        source:  $package
+                        stamp:   $id
+                        log_url: $"($log_base)/($arch)/($prefix)/($package)/($id)@/log.gz"
+                    }
+                }
+            }
+        } | flatten
+    )
+    if ($entries | is-empty) { return [] }
+    $entries | fetch-and-parse-logs
+}

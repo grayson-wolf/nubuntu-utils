@@ -3,7 +3,8 @@
 use packaging/meta.nu [pkg-name, pkg-top-release, pkg-version, target-release]
 use packaging/build.nu [cpbd, tarme, gen-ppa-name, test-urls]
 use packaging/tests/ [autopkgtest-cookie, autopkgtest-cookie-path, submit-autopkgtest, select-and-submit, ppa-test-urls, fetch-ppa-test-runs, fetch-ppa-running, fetch-ppa-waiting, render-tests-tables]
-use completions.nu [ppa-completions, normalize-ppa-name]
+use completions.nu [ppa-completions]
+use packaging/launchpad.nu [normalize-ppa-name]
 use ubuntu-versions.nu [DEVEL_RELEASE]
 
 # PPA workflow commands. Run bare `p` to see available subcommands.

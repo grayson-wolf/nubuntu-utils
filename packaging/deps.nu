@@ -187,3 +187,21 @@ export def dep-components [
         }
     }
 }
+
+# Fetch reverse dependencies for a package.
+# Uses apt-cache to find all packages that depend on the given package.
+export def revdeps [
+    package: string # The package to check reverse dependencies for
+]: nothing -> list<string> {
+    let output = apt-cache rdepends $package | lines
+
+    if ($output | length) < 2 {
+        return []
+    }
+
+    # Skip header lines (package name and "Reverse Depends:")
+    # Each line may have a dependency type prefix like "Depends:", "Recommends:", etc.
+    $output | skip 2 | each {|line|
+        $line | str trim | str replace -r '^[A-Za-z]+:\s*' ''
+    } | where { $in != "" } | uniq
+}
