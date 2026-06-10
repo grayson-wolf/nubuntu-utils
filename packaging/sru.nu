@@ -94,5 +94,9 @@ export def sru-list [
         }
     })
 
+    print -e $"Bug Legend: "
+    print -e $"  (ansi green)Verified(ansi reset) / (ansi red)Verification failed(ansi reset) / (ansi yellow)Incomplete(ansi reset) / (ansi dark_gray)Candidate for Removal(ansi reset) / (ansi xterm_gold1)Has messages(ansi reset)"
+    print -e $"  🚧 - Tagged with block-proposed-($series)"
+    print -e $""
     $rows
 }
