@@ -6,12 +6,16 @@ use q.nu
 use packaging/navigation.nu [pkg]
 use completions.nu [ppa-completions]
 
+def deprecation-warning [old: string, new: string]: nothing -> nothing {
+    print -e $"(ansi yellow_bold)⚠ `($old)` is deprecated, use `($new)` instead(ansi reset)"
+}
+
 # Legacy alias for `pkg`
 export def --env gp [
     package: string
     --refetch (-r)
 ]: nothing -> nothing {
-    print $"(ansi yellow_bold)⚠ `gp` is deprecated, use `pkg` instead(ansi reset)"
+    deprecation-warning "gp" "pkg"
     if $refetch {
         pkg $package -r
     } else {
@@ -21,7 +25,7 @@ export def --env gp [
 
 # Legacy wrapper for `p name`
 export def "ppa-name" []: nothing -> string {
-    print $"(ansi yellow_bold)⚠ `ppa-name` is deprecated, use `p name` instead(ansi reset)"
+    deprecation-warning "ppa-name" "p name"
     p name
 }
 
@@ -33,7 +37,7 @@ export def --wrapped ppa-build [
     --no-deps (-d)
     ...debuild_flags: string
 ]: nothing -> nothing {
-    print $"(ansi yellow_bold)⚠ `ppa-build` is deprecated, use `p build` instead(ansi reset)"
+    deprecation-warning "ppa-build" "p build"
     p build --proposed=$proposed --security=$security --backports=$backports --no-deps=$no_deps ...$debuild_flags
 }
 
@@ -44,7 +48,7 @@ export def ppa-up [
     --security (-s)
     --backports (-b)
 ]: nothing -> nothing {
-    print $"(ansi yellow_bold)⚠ `ppa-up` is deprecated, use `p up` instead(ansi reset)"
+    deprecation-warning "ppa-up" "p up"
     p up $ppa_name --proposed=$proposed --security=$security --backports=$backports
 }
 
@@ -52,7 +56,7 @@ export def ppa-up [
 export def ppa-reap [
     name?: string
 ]: nothing -> list<string> {
-    print $"(ansi yellow_bold)⚠ `ppa-reap` is deprecated, use `p reap` instead(ansi reset)"
+    deprecation-warning "ppa-reap" "p reap"
     p reap $name
 }
 
@@ -60,7 +64,7 @@ export def ppa-reap [
 export def ppa-destroy [
     ppa_name: string@ppa-completions
 ]: nothing -> nothing {
-    print $"(ansi yellow_bold)⚠ `ppa-destroy` is deprecated, use `p destroy` instead(ansi reset)"
+    deprecation-warning "ppa-destroy" "p destroy"
     p destroy $ppa_name
 }
 
@@ -70,7 +74,7 @@ export def ppa-autotest [
     --ppa: string@ppa-completions
     --no-select
 ]: nothing -> nothing {
-    print $"(ansi yellow_bold)⚠ `ppa-autotest` is deprecated, use `p test` instead(ansi reset)"
+    deprecation-warning "ppa-autotest" "p test"
     if ($ppa | is-not-empty) {
         p test --proposed=$proposed --ppa $ppa --no-select=$no_select
     } else {
@@ -84,7 +88,7 @@ export def ppa-tests [
     --series (-s): string
     --raw (-r)
 ]: nothing -> any {
-    print $"(ansi yellow_bold)⚠ `ppa-tests` is deprecated, use `p tests` instead(ansi reset)"
+    deprecation-warning "ppa-tests" "p tests"
     if ($series | is-empty) {
         p tests $ppa_name --raw=$raw
     } else {
@@ -96,7 +100,7 @@ export def ppa-tests [
 export def testsync [
     --release (-r): string
 ]: nothing -> nothing {
-    print $"(ansi yellow_bold)⚠ `testsync` is deprecated, use `p sync` instead(ansi reset)"
+    deprecation-warning "testsync" "p sync"
     if ($release | is-not-empty) {
         p sync -r $release
     } else {
@@ -108,55 +112,55 @@ export def testsync [
 
 # Legacy wrapper for `q push`
 export def qpush []: nothing -> nothing {
-    print $"(ansi yellow_bold)⚠ `qpush` is deprecated, use `q push` instead(ansi reset)"
+    deprecation-warning "qpush" "q push"
     q push
 }
 
 # Legacy wrapper for `q pop`
 export def qpop []: nothing -> nothing {
-    print $"(ansi yellow_bold)⚠ `qpop` is deprecated, use `q pop` instead(ansi reset)"
+    deprecation-warning "qpop" "q pop"
     q pop
 }
 
 # Legacy wrapper for `q ref`
 export def qref []: nothing -> nothing {
-    print $"(ansi yellow_bold)⚠ `qref` is deprecated, use `q ref` instead(ansi reset)"
+    deprecation-warning "qref" "q ref"
     q ref
 }
 
 # Legacy wrapper for `q add`
 export def qadd [file: string]: nothing -> nothing {
-    print $"(ansi yellow_bold)⚠ `qadd` is deprecated, use `q add` instead(ansi reset)"
+    deprecation-warning "qadd" "q add"
     q add $file
 }
 
 # Legacy wrapper for `q header`
 export def qheader []: nothing -> nothing {
-    print $"(ansi yellow_bold)⚠ `qheader` is deprecated, use `q header` instead(ansi reset)"
+    deprecation-warning "qheader" "q header"
     q header
 }
 
 # Legacy wrapper for `q series`
 export def qstatus []: nothing -> nothing {
-    print $"(ansi yellow_bold)⚠ `qstatus` is deprecated, use `q series` instead(ansi reset)"
+    deprecation-warning "qstatus" "q series"
     q series
 }
 
 # Legacy wrapper for `q top`
 export def qtop []: nothing -> nothing {
-    print $"(ansi yellow_bold)⚠ `qtop` is deprecated, use `q top` instead(ansi reset)"
+    deprecation-warning "qtop" "q top"
     q top
 }
 
 # Legacy wrapper for `q new`
 export def qnew [name: string]: nothing -> nothing {
-    print $"(ansi yellow_bold)⚠ `qnew` is deprecated, use `q new` instead(ansi reset)"
+    deprecation-warning "qnew" "q new"
     q new $name
 }
 
 # Legacy wrapper for `q edit`
 export def qedit [file: string]: nothing -> nothing {
-    print $"(ansi yellow_bold)⚠ `qedit` is deprecated, use `q edit` instead(ansi reset)"
+    deprecation-warning "qedit" "q edit"
     q edit $file
 }
 
@@ -165,6 +169,6 @@ export def debpatch [
     patch_name: string
     --sid (-s)
 ]: nothing -> nothing {
-    print $"(ansi yellow_bold)⚠ `debpatch` is deprecated, use `q diff` instead(ansi reset)"
+    deprecation-warning "debpatch" "q diff"
     q diff $patch_name --sid=$sid
 }
