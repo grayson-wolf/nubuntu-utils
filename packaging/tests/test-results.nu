@@ -23,6 +23,8 @@ export def format-subtest [status: string]: nothing -> string {
         "BROKEN" => "Broken"
         "TMPFAIL" => "Temp Fail"
         "BAD" => "Bad"
+        "RUNNING" => "Running"
+        "WAITING" => "Queued"
         _ => $status
     }
     let colored = match $status {
@@ -32,6 +34,8 @@ export def format-subtest [status: string]: nothing -> string {
         "FAIL_BADPKG" => $"(ansi light_red)($display)(ansi reset)"
         "FLAKY" | "SKIP" | "TMPFAIL" => $"(ansi yellow)($display)(ansi reset)"
         "BAD" => $"(ansi dark_gray)($display)(ansi reset)"
+        "RUNNING" => $"(ansi cyan)($display)(ansi reset)"
+        "WAITING" => $"(ansi blue)($display)(ansi reset)"
         _ => $display
     }
     $colored
@@ -222,7 +226,102 @@ export def fetch-ppa-test-runs [
     $latest | fetch-and-parse-logs
 }
 
-# Compute the autopkgtest URL "prefix" component for a package name
+# Common row builder for pending (running/waiting) autopkgtest jobs.
+# Detects proposed-pocket via the "/migration-reference" trigger marker and
+# produces a record shaped like fetch-ppa-test-runs output.
+def make-pending-row [
+    source: string
+    arch: string
+    triggers: list<string>
+    time: datetime
+    overall: string
+]: nothing -> record {
+    let proposed = ($triggers | any { $in | str contains "/migration-reference" })
+    {
+        source:   $source
+        arch:     $arch
+        kind:     (if $proposed { "proposed" } else { "base" })
+        time:     $time
+        log_url:  $"($AUTOPKGTEST_URL)/running"
+        overall:  $overall
+        subtests: []
+    }
+}
+
+# Fetch currently running autopkgtest jobs for a PPA.
+# Returns rows shaped like fetch-ppa-test-runs output (source, arch, kind,
+# time, log_url, overall=RUNNING, subtests=[]), so render-tests-tables can
+# display them alongside finished runs.
+export def fetch-ppa-running [
+    series: string
+    owner: string
+    ppa: string
+    arches: list<string> = []  # empty = all
+]: nothing -> table {
+    let ppa_id = $"($owner)/($ppa)"
+    let data = (do --ignore-errors { http get $"($AUTOPKGTEST_URL)/static/running.json" } | default {})
+    if ($data | is-empty) { return [] }
+    let now = (date now)
+    $data
+    | transpose pkg jobs
+    | each {|p|
+        $p.jobs | transpose handle codenames | each {|h|
+            $h.codenames | transpose codename arches | each {|c|
+                if $c.codename != $series { return [] }
+                $c.arches | transpose arch info | each {|a|
+                    let jobinfo = ($a.info | get -o 0 | default {})
+                    let ppas = ($jobinfo | get -o ppas | default [])
+                    if $ppa_id not-in $ppas { return null }
+                    if (not ($arches | is-empty)) and ($a.arch not-in $arches) { return null }
+                    # info[1] is elapsed-seconds-since-submission, not a unix epoch.
+                    let elapsed = ($a.info | get -o 1 | default 0 | into int)
+                    let triggers = ($jobinfo | get -o triggers | default [])
+                    make-pending-row $p.pkg $a.arch $triggers ($now - ($elapsed * 1sec)) "RUNNING"
+                } | where { $in != null }
+            } | flatten
+        } | flatten
+    } | flatten
+}
+
+# Fetch queued (waiting) autopkgtest jobs for a PPA. Same row shape as
+# fetch-ppa-running but with overall=WAITING.
+export def fetch-ppa-waiting [
+    series: string
+    owner: string
+    ppa: string
+    arches: list<string> = []
+]: nothing -> table {
+    let ppa_id = $"($owner)/($ppa)"
+    let data = (do --ignore-errors { http get $"($AUTOPKGTEST_URL)/queues.json" } | default {})
+    if ($data | is-empty) { return [] }
+    # Shape: {queue: {codename: {arch: [ {package, triggers, submit-time, ppas?}, ... ]}}}
+    # PPA jobs live under the "ppa" queue; "ubuntu" entries lack the ppas field.
+    let ppa_queue = ($data | get -o ppa | default {})
+    if ($ppa_queue | is-empty) { return [] }
+    $ppa_queue
+    | transpose codename arches
+    | each {|c|
+        if $c.codename != $series { return [] }
+        $c.arches | transpose arch entries | each {|a|
+            if (not ($arches | is-empty)) and ($a.arch not-in $arches) { return [] }
+            $a.entries | each {|e|
+                let ppas = ($e | get -o ppas | default [])
+                if $ppa_id not-in $ppas { return null }
+                let pkg = ($e | get -o package | default "")
+                if ($pkg | is-empty) { return null }
+                let triggers = ($e | get -o triggers | default [])
+                let submit_str = ($e | get -o submit-time | default "")
+                let submit_time = if ($submit_str | is-empty) {
+                    (date now)
+                } else {
+                    try { $submit_str | into datetime } catch { (date now) }
+                }
+                make-pending-row $pkg $a.arch $triggers $submit_time "WAITING"
+            } | where { $in != null }
+        } | flatten
+    } | flatten
+}
+
 # (matches Debian pool convention: "libX..." → "libx", else first letter).
 def package-prefix [package: string]: nothing -> string {
     if ($package | str starts-with "lib") {
@@ -319,7 +418,12 @@ export def render-tests-tables [header_fn: closure, dedup_latest: bool = true]: 
         $ordered | each {|r|
             let time_str = ($r.time | format date "%Y-%m-%d %H:%M")
             let log_cell = (osc8-link $r.log_url "🔗")
-            let kind_cell = if $r.kind == "proposed" { $"(ansi yellow)proposed(ansi reset)" } else { "base" }
+            let kind_cell = match $r.kind {
+                "proposed" => $"(ansi yellow)proposed(ansi reset)"
+                "running" => $"(ansi cyan)running(ansi reset)"
+                "queued" => $"(ansi blue)queued(ansi reset)"
+                _ => "base"
+            }
             let overall_cell = (format-subtest $r.overall)
             mut row = if $multi_source {
                 { source: $pkg, arch: $r.arch, kind: $kind_cell, time: $time_str, log: $log_cell, overall: $overall_cell }
