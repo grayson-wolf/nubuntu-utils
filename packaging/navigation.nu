@@ -1,6 +1,7 @@
 # Package navigation: find/clone packages and inspect their ownership.
 
 use ../completions.nu [pkg-completions]
+use ../formatting.nu [with-spinner]
 use build.nu [tarme]
 
 # Make a directory and immediately enter it.
@@ -56,7 +57,9 @@ export def poc [
   let data = if $use_cache {
       open $cache_file
   } else {
-      let json = (http get https://static-reports.ubuntu.com/package-team-mapping.json)
+      let json = with-spinner "Fetching package-team mapping..." {
+          http get https://static-reports.ubuntu.com/package-team-mapping.json
+      }
       $json | save -f $cache_file
       $json
   }

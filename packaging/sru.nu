@@ -1,7 +1,7 @@
 # SRU (Stable Release Update) tracking commands
 
 use ../completions.nu [release-completions]
-use ../formatting.nu [osc8-link, days-to-duration]
+use ../formatting.nu [osc8-link, days-to-duration, with-spinner]
 use ../ubuntu-versions.nu [LATEST_STABLE_RELEASE]
 
 const SRU_REPORT_URL = "https://ubuntu-archive-team.ubuntu.com/sru_report.yaml"
@@ -39,7 +39,7 @@ export def sru-list [
     series?: string@release-completions  # Ubuntu series (default: latest stable)
     --all-series (-A)                    # Show all series combined
 ]: nothing -> table {
-    let data = (http get $SRU_REPORT_URL | from yaml)
+    let data = with-spinner "Fetching SRU report..." { http get $SRU_REPORT_URL | from yaml }
 
     let entries = if $all_series {
         $data | transpose series items | each {|row|

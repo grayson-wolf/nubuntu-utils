@@ -88,7 +88,7 @@ export def excuses [
 ]: nothing -> table {
     let pkg = $package | default (pkg-name)
 
-    let sources = fetch-excuses $series
+    let sources = with-spinner $"Fetching excuses for ($series)..." { fetch-excuses $series }
 
     let matches = ($sources | where source == $pkg)
 
@@ -519,7 +519,7 @@ export def excuses-clusters [
     --series (-s): string = $DEVEL_RELEASE  # Ubuntu series
     --limit (-n): int = 5                   # Maximum number of clusters to show
 ]: nothing -> table<package: string, size: int, waiting_for: list<string>> {
-    let sources = fetch-excuses $series
+    let sources = with-spinner $"Fetching excuses for ($series)..." { fetch-excuses $series }
 
     # Build {package, waiting_for} for every entry that has migrate-after deps
     let with_deps = (

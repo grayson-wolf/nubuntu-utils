@@ -6,6 +6,7 @@ use packaging/tests/ [autopkgtest-cookie, autopkgtest-cookie-path, submit-autopk
 use completions.nu [ppa-completions]
 use packaging/launchpad.nu [normalize-ppa-name]
 use ubuntu-versions.nu [DEVEL_RELEASE]
+use formatting.nu [with-spinner]
 
 # PPA workflow commands. Run bare `p` to see available subcommands.
 export def main []: nothing -> nothing {
@@ -175,18 +176,20 @@ export def tests [
     } else { $series }
 
     let max_per_arch = if $history { $limit } else { 4 }
-    let finished = (fetch-ppa-test-runs $series_resolved $owner $ppa $max_per_arch $arches)
     # Running/queued runs are appended with kind="running"/"queued" so the
     # render-tests-tables (source, arch, kind) dedup keeps them as separate
     # rows rather than overwriting prior finished runs.
-    let pending = if $no_pending {
-        []
-    } else {
-        let running = (fetch-ppa-running $series_resolved $owner $ppa $arches | each {|r| $r | update kind "running" })
-        let waiting = (fetch-ppa-waiting $series_resolved $owner $ppa $arches | each {|r| $r | update kind "queued" })
-        $running ++ $waiting
+    let runs = with-spinner $"Fetching tests for ($owner)/($ppa) in ($series_resolved)..." {
+        let finished = (fetch-ppa-test-runs $series_resolved $owner $ppa $max_per_arch $arches)
+        let pending = if $no_pending {
+            []
+        } else {
+            let running = (fetch-ppa-running $series_resolved $owner $ppa $arches | each {|r| $r | update kind "running" })
+            let waiting = (fetch-ppa-waiting $series_resolved $owner $ppa $arches | each {|r| $r | update kind "queued" })
+            $running ++ $waiting
+        }
+        $finished ++ $pending
     }
-    let runs = ($finished ++ $pending)
     if ($runs | is-empty) {
         print -e $"(ansi yellow)No test results found for ($owner)/($ppa) in ($series_resolved).(ansi reset)"
         return

@@ -3,6 +3,7 @@
 
 use ../../completions.nu [pkg-completions]
 use ../../ubuntu-versions.nu [DEVEL_RELEASE, SUPPORTED_RELEASES]
+use ../../formatting.nu [with-spinner]
 use ../meta.nu [pkg-name]
 use fetch.nu [fetch-archive-test-runs]
 use render.nu [render-tests-tables, render-tests-matrix]
@@ -37,12 +38,12 @@ export def archive-tests [
     let max_per_arch = if $use_matrix { 1 } else if $history { $limit } else { 4 }
 
     # Fetch in parallel across series; tag each run with its series.
-    let runs = (
+    let runs = with-spinner $"Fetching archive tests for ($pkg)..." {
         $series_list | par-each {|s|
             fetch-archive-test-runs $s $pkg $arches $max_per_arch
             | each {|r| $r | insert series $s }
         } | flatten
-    )
+    }
     if ($runs | is-empty) {
         let series_disp = ($series_list | str join ", ")
         print -e $"(ansi yellow)No test results found for ($pkg) in ($series_disp).(ansi reset)"
