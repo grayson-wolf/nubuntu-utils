@@ -63,6 +63,10 @@ def format-status [status: string, log_url: string, refined: string = ""]: nothi
 # Statuses for which we'd want to fetch the log and refine the classification.
 const REFINABLE_STATUSES = ["REGRESSION"]
 
+# Refined log-derived statuses that count as a real test regression (not
+# infrastructure / install / harness failure). Used by my-excuses --failing.
+const REAL_FAIL_REFINED = ["FAIL", "FAIL_STDERR", "FAIL_TIMEOUT", "BROKEN"]
+
 # Given a list of unique log URLs, fetch and classify each in parallel.
 # Returns a record { <url>: <overall_status> }.
 def build-refinement-map [log_urls: list<string>]: nothing -> record {
@@ -308,6 +312,7 @@ def build-autopkgtest-rows [
     all: bool = false
     delineate: bool = false
     arches_override: list<string> = []
+    failing: bool = false  # drop rows with no real-fail arch (requires delineate)
 ]: nothing -> any {
     if ($autopkgtest | is-empty) { return [] }
     let tests = ($autopkgtest | reject -o verdict | transpose pkg archinfo)
@@ -337,6 +342,23 @@ def build-autopkgtest-rows [
         } | flatten | where { $in != null })
         build-refinement-map $urls
     } else { {} }
+
+    # Filter on raw data before rendering: a row qualifies iff some arch has
+    # a REGRESSION whose refined log classification is a real test failure.
+    let tests = if $failing {
+        $tests | where {|row|
+            $all_arches | any {|arch|
+                let info = ($row.archinfo | get -o $arch)
+                if ($info | is-empty) { false } else {
+                    let status = ($info | get 0 | default "")
+                    let log_url = ($info | get 1 | default "")
+                    if $status != "REGRESSION" or ($log_url | is-empty) { false } else {
+                        ($refinement | get -o $log_url | default "") in $REAL_FAIL_REFINED
+                    }
+                }
+            }
+        }
+    } else { $tests }
 
     $tests | each {|row|
         let base = { package: $row.pkg }
@@ -441,9 +463,14 @@ export def my-excuses [
     --user (-u): string = ""                # LP username (default: $env.LAUNCHPAD_NAME)
     --detailed (-D)                         # Also render full per-package excuses output
     --why (-w)                              # Refine REGRESSION cells with log-derived failure mode (only with --detailed)
+    --failing (-f)                          # Only rows with a real test regression (implies -D and -w)
     --limit (-n): int = 0                   # Cap on excuses sources to query (0 = all). Useful for testing.
     --raw (-r)                              # Return structured records
 ]: nothing -> any {
+    # --failing implies --detailed and --why
+    let detailed = ($detailed or $failing)
+    let why = ($why or $failing)
+
     let me = if ($user | is-empty) { $env.LAUNCHPAD_NAME? | default "" } else { $user }
     if ($me | is-empty) {
         error make { msg: "No user — pass --user or set $env.LAUNCHPAD_NAME" }
@@ -504,7 +531,7 @@ export def my-excuses [
 
     let unified = ($candidates | each {|c|
         let at = ($c | get -o policy_info.autopkgtest | default {})
-        let rows = (build-autopkgtest-rows $at false $why $global_arches)
+        let rows = (build-autopkgtest-rows $at false $why $global_arches $failing)
         $rows | each {|r| { "blocked-package": $c.source } | merge $r }
     } | flatten)
 
