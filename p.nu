@@ -15,7 +15,7 @@ export def main []: nothing -> nothing {
     print "  p reap     — Destroy all PPAs matching a package substring"
     print "  p destroy  — Destroy a single PPA by name"
     print "  p test     — Submit autopkgtest requests (local or named PPA)"
-    print "  p tests    — Show autopkgtest results for a named PPA"
+    print "  p tests    — Show autopkgtest results (local or named PPA)"
     print "  p name     — Print the generated PPA name"
     print "  p sync     — Test a Debian sync via PPA build"
     print $"\nRun `p <subcommand> --help` for details."
