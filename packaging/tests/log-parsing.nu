@@ -169,7 +169,11 @@ export def parse-run-timestamp [stamp: string]: nothing -> datetime {
 # Output rows: {source, arch, kind, time, log_url, overall, subtests}
 export def fetch-and-parse-logs []: table -> table {
     $in | par-each {|r|
-        let log = (do --ignore-errors { ^curl -s $r.log_url | ^gzip -d } | default "")
+        let fetched = (^curl -fs $r.log_url | complete)
+        let log = if $fetched.exit_code != 0 { "" } else {
+            let decoded = ($fetched.stdout | ^gzip -d | complete)
+            if $decoded.exit_code != 0 { "" } else { $decoded.stdout }
+        }
         let parsed = (parse-autopkgtest-log $log)
         {
             source:   $r.source
