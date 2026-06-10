@@ -102,9 +102,15 @@ export def with-spinner [title: string, work: closure]: any -> any {
             $i = $i + 1
         }
     })
-    let result = ($inp | do $work)
-    job kill $jid
-    "\r\e[K" | save --append --raw /dev/tty
+    let cleanup = {
+        job kill $jid
+        "\r\e[K" | save --append --raw /dev/tty
+    }
+    let result = try { $inp | do $work } catch {|err|
+        do $cleanup
+        error make $err
+    }
+    do $cleanup
     $result
 }
 
