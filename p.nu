@@ -52,10 +52,10 @@ export def up [
     --backports (-b) # Use the backports pocket
 ]: nothing -> nothing {
     let ppa_path = (normalize-ppa-name $ppa_name)
-    let pocket_args = if $proposed { [--pocket proposed] }
-        else if $security { [--pocket security] }
-        else if $backports { [--pocket backports] }
-        else { [] }
+    let pocket_args = if $proposed { [--pocket proposed]
+        } else if $security { [--pocket security]
+        } else if $backports { [--pocket backports]
+        } else { [] }
     ppa create $ppa_name ...$pocket_args
     dput $"ppa:($ppa_path)" ../*.changes
     ppa wait $ppa_path
