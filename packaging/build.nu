@@ -1,6 +1,6 @@
 # Building source packages and managing build artifacts
 
-use meta.nu [pkg-release, pkg-upstream-version, pkg-version, pkg-name]
+use meta.nu [target-release, pkg-upstream-version, pkg-version, pkg-name]
 use ../completions.nu [release-completions]
 use ../ubuntu-versions.nu [ARCHES]
 
@@ -56,7 +56,7 @@ export def getdeps []: nothing -> nothing {
 export def gen-ppa-name []: nothing -> string {
     let pkg_name = pkg-name
     let changes_hash = sha256sum ../*.changes | str substring 0..7
-    $"($pkg_name)-(pkg-release)-($changes_hash)" | str downcase
+    $"($pkg_name)-(target-release)-($changes_hash)" | str downcase
 }
 
 # Generate autopkgtest request URLs for the current package's PPA upload.
@@ -66,7 +66,7 @@ export def test-urls [
 ]: nothing -> table<arch: string, url: string, proposed: bool> {
     let pkg_name = pkg-name
     let version = pkg-version
-    let release_name = pkg-release
+    let release_name = target-release
     let ppa = gen-ppa-name
 
     # Parse architectures from debian/control

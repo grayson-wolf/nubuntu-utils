@@ -6,8 +6,11 @@ export def pkg-name []: nothing -> string {
     pwd | path split | last
 }
 
-# Find the current release name the package is targetting in debian/changelog.
-export def pkg-release []: nothing -> string {
+# Get the literal distribution from the top of debian/changelog (verbatim,
+# including UNRELEASED, pocket suffixes, or Debian distros). Use
+# `target-release` instead if you want the series the package actually
+# uploads/tests against.
+export def pkg-top-release []: nothing -> string {
     open debian/changelog | lines | first | split row " " | get 2 | str replace ";" ""
 }
 
@@ -39,4 +42,20 @@ export def last-published-release []: nothing -> any {
         | where { $in !~ '(?i)^UNRELEASED' }
         | where { $in in $ubuntu_names }
         | get -o 0
+}
+
+# Canonical "what Ubuntu series does this package target for builds/uploads/
+# tests?" helper. Strips pocket suffix from the top changelog entry; falls
+# back to last-published-release, then $DEVEL_RELEASE, when the top entry is
+# UNRELEASED, a Debian distro (unstable, experimental, ...), or otherwise
+# not a known Ubuntu codename.
+export def target-release []: nothing -> string {
+    use ../ubuntu-versions.nu [ALL_RELEASES, DEVEL_RELEASE]
+    let names = ($ALL_RELEASES | get name)
+    let top = (pkg-top-release | split row "-" | get 0)
+    if ($top in $names) and ($top !~ '(?i)^UNRELEASED') {
+        $top
+    } else {
+        (try { last-published-release } catch { null }) | default $DEVEL_RELEASE
+    }
 }

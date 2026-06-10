@@ -1,6 +1,6 @@
 # PPA workflow subcommands — all PPA lifecycle operations under `p`.
 
-use packaging/meta.nu [pkg-name, pkg-release, pkg-version, last-published-release]
+use packaging/meta.nu [pkg-name, pkg-top-release, pkg-version, target-release]
 use packaging/build.nu [cpbd, tarme, gen-ppa-name, test-urls]
 use packaging/tests/ [autopkgtest-cookie, autopkgtest-cookie-path, submit-autopkgtest, select-and-submit, ppa-test-urls, fetch-ppa-test-runs, fetch-ppa-running, fetch-ppa-waiting, render-tests-tables]
 use completions.nu [ppa-completions, normalize-ppa-name]
@@ -154,7 +154,7 @@ export def test [
 # extra running.json/queues.json fetches.
 export def tests [
     ppa_name?: string@ppa-completions   # PPA name (auto-detected if omitted)
-    --series (-s): string = ""              # Ubuntu series (default: package's changelog target, else devel)
+    --series (-s): string = ""              # Ubuntu series (default: cwd target if PPA auto-derived, else devel)
     --arches (-a): list<string> = []        # Architectures (default: all available)
     --history (-H)                          # Show all recent runs (not just the latest per arch)
     --limit (-l): int = 10                  # Max runs per arch in history mode
@@ -174,7 +174,7 @@ export def tests [
     let ppa = ($split | get 1)
 
     let series_resolved = if ($series | is-empty) {
-        (try { last-published-release } catch { null }) | default $DEVEL_RELEASE
+        if ($ppa_name | is-empty) { (target-release) } else { $DEVEL_RELEASE }
     } else { $series }
 
     let max_per_arch = if $history { $limit } else { 4 }
