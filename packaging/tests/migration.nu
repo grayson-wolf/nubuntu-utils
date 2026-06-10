@@ -223,13 +223,13 @@ export def excuses [
 
     print -e ""
 
-    # --dependencies mode: show combined test table for all blocking dependencies
+    # --dependencies mode: show the package's own test results, then the
+    # combined test table for all blocking dependencies. Direct failures
+    # come first (with blocker = the package itself).
     if $dependencies {
+        let self_at = ($data | get -o policy_info.autopkgtest | default {})
         let dep_pkgs = ($blocked_by | append $migrate_after)
-        if ($dep_pkgs | is-empty) {
-            print -e "No blocking dependencies to investigate."
-            return []
-        }
+
         # Resolve each dep to its autopkgtest substructure; drop deps with none.
         let dep_entries = ($dep_pkgs | each {|dep_pkg|
             let d = ($sources | where source == $dep_pkg)
@@ -239,23 +239,27 @@ export def excuses [
             }
         } | where { $in != null })
 
-        if ($dep_entries | is-empty) {
-            print -e "\(no test data in blocking dependencies\)"
+        if ($self_at | is-empty) and ($dep_entries | is-empty) {
+            print -e "\(no test data for package or blocking dependencies\)"
             return []
         }
 
-        # Union of arches across all deps so cross-package rows align.
-        let all_arches = ($dep_entries | each {|e|
+        # Union of arches across self + all deps so cross-package rows align.
+        let all_entries = (
+            (if ($self_at | is-empty) { [] } else { [{ pkg: $pkg, at: $self_at }] })
+            | append $dep_entries
+        )
+        let all_arches = ($all_entries | each {|e|
             $e.at | reject -o verdict | values | each { columns } | flatten
         } | flatten | uniq | sort)
 
-        let rows = ($dep_entries | each {|e|
+        let rows = ($all_entries | each {|e|
             build-autopkgtest-rows $e.at $all $why $all_arches $failing
                 | each {|r| { blocker: $e.pkg } | merge $r }
         } | flatten)
 
         if ($rows | is-empty) {
-            print -e "\(no actionable test results in blocking dependencies\)"
+            print -e "\(no actionable test results for package or blocking dependencies\)"
             return []
         }
         return $rows
