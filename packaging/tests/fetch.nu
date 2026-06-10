@@ -132,11 +132,17 @@ export def fetch-ppa-waiting [
         if $c.codename != $series { return [] }
         $c.arches | transpose arch entries | each {|a|
             if (not ($arches | is-empty)) and ($a.arch not-in $arches) { return [] }
-            $a.entries | each {|e|
+            # Each entry is a string "pkgname\n{json-args}" — not a record.
+            $a.entries | each {|raw|
+                let parts = ($raw | split row "\n" --number 2)
+                let pkg = ($parts | get -o 0 | default "" | str trim)
+                if ($pkg | is-empty) { return null }
+                let json_str = ($parts | get -o 1 | default "")
+                let e = if ($json_str | is-empty) { {} } else {
+                    try { $json_str | from json } catch { {} }
+                }
                 let ppas = ($e | get -o ppas | default [])
                 if $ppa_id not-in $ppas { return null }
-                let pkg = ($e | get -o package | default "")
-                if ($pkg | is-empty) { return null }
                 let triggers = ($e | get -o triggers | default [])
                 let submit_str = ($e | get -o submit-time | default "")
                 let submit_time = if ($submit_str | is-empty) {
