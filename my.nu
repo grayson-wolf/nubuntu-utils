@@ -13,9 +13,9 @@ use packaging/tests/migration.nu [
     build-autopkgtest-rows,
 ]
 use packaging/sru.nu [fetch-sru-entries, build-sru-rows, print-sru-legend]
-use packaging/launchpad.nu [uploader-data, lp-ppa-entries]
+use packaging/launchpad.nu [uploader-data, lp-ppa-entries, lp-ppa-detail]
 use completions.nu [release-completions]
-use formatting.nu [osc8-link, with-spinner]
+use formatting.nu [osc8-link, with-spinner, bool-glyph, fmt-mib, fmt-relative]
 use ubuntu-versions.nu [DEVEL_RELEASE, LATEST_STABLE_RELEASE]
 
 # Resolve the user: explicit `--user` wins, else $env.LAUNCHPAD_NAME.
@@ -156,12 +156,41 @@ export def "my srus" [
 # (Pagination + caching live in `packaging/launchpad.nu` so the same data
 # powers both `my ppas` and `ppa-completions` without circular imports.)
 
+# Free-field projection of a raw LP archive entry into a display row.
+def ppa-project [e: record]: nothing -> record {
+    let name = ($e | get -o name | default "")
+    let web = ($e | get -o web_link | default "")
+    {
+        name: (osc8-link $web $name)
+        displayname: ($e | get -o displayname | default "")
+        pub: (bool-glyph ($e | get -o publish | default false))
+        priv: (bool-glyph ($e | get -o private | default false))
+        quota: (fmt-mib ($e | get -o authorized_size | default 0))
+    }
+}
+
+# Builds glyph string for a detail record.
+def builds-summary [d: record]: nothing -> string {
+    let f = ($d | get -o builds_failed | default 0)
+    let p = ($d | get -o builds_pending | default 0)
+    let s = ($d | get -o builds_succeeded | default 0)
+    let parts = [
+        (if $f > 0 { $"(ansi red)($f)✗(ansi reset)" } else { null })
+        (if $p > 0 { $"(ansi yellow)($p)…(ansi reset)" } else { null })
+        (if $s > 0 { $"(ansi green)($s)✓(ansi reset)" } else { null })
+    ] | where { $in != null }
+    if ($parts | is-empty) { "—" } else { $parts | str join " " }
+}
+
 # List PPAs owned by you (or `-u <user>`) on Launchpad.
-# Returns one row per PPA: name, displayname, status, private flag, and a
-# clickable web link. Pass `--raw` for the full LP entry records.
+# Default columns: name, displayname, pub, priv, quota.
+# `--details (-d)` enriches each row with sources, last_upload, series,
+# and a build summary (one extra HTTP round per PPA, cached 5min).
+# `--raw (-r)` returns the full LP entry records.
 export def "my ppas" [
     --user (-u): string = ""  # LP username (default: $env.LAUNCHPAD_NAME)
     --raw (-r)                # Return the raw LP entry records
+    --details (-d)            # Add sources/last_upload/series/builds (slow first call)
 ]: nothing -> any {
     let me = (resolve-user $user)
     let entries = (with-spinner $"Fetching PPAs for ($me)..." { lp-ppa-entries $me })
@@ -170,15 +199,21 @@ export def "my ppas" [
         return []
     }
     if $raw { return $entries }
-    print -e $"(ansi attr_bold)my ppas(ansi reset) — (ansi cyan)($entries | length)(ansi reset) PPAs for (ansi cyan)($me)(ansi reset)"
-    $entries | each {|e|
-        let name = ($e | get -o name | default "")
-        let web = ($e | get -o web_link | default "")
-        {
-            name: (osc8-link $web $name)
-            displayname: ($e | get -o displayname | default "")
-            status: ($e | get -o status | default "")
-            private: ($e | get -o private | default false)
+    let suffix = if $details { " (with details)" } else { "" }
+    print -e $"(ansi attr_bold)my ppas(ansi reset) — (ansi cyan)($entries | length)(ansi reset) PPAs for (ansi cyan)($me)(ansi reset)($suffix)"
+    let base = ($entries | each {|e| ppa-project $e })
+    if not $details { return $base }
+    let details_list = (with-spinner $"Fetching details for ($entries | length) PPAs..." {
+        $entries | par-each --keep-order {|e| lp-ppa-detail $me ($e | get -o name | default "") }
+    })
+    $base | zip $details_list | each {|pair|
+        let row = $pair.0
+        let d = $pair.1
+        $row | merge {
+            sources: ($d | get -o sources | default 0)
+            last_upload: (fmt-relative ($d | get -o last_upload | default ""))
+            series: (($d | get -o series | default []) | str join ",")
+            builds: (builds-summary $d)
         }
     }
 }

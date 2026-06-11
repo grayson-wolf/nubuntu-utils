@@ -139,3 +139,55 @@ export def lp-ppa-entries [user?: string]: nothing -> list {
 export def lp-ppa-names [user?: string]: nothing -> list<string> {
     lp-ppa-entries $user | get -o name | default []
 }
+
+# Extract distro series basename from a distro_series_link URL.
+# https://api.launchpad.net/devel/ubuntu/noble -> noble
+def series-from-link [link: any]: nothing -> string {
+    if ($link | is-empty) { return "" }
+    $link | into string | path basename
+}
+
+# Per-PPA enrichment fetched lazily (used by `my ppas --details`).
+# Combines getPublishedSources + getBuildCounters into one cached record.
+# Returns { sources, last_upload, series, builds_pending, builds_failed,
+#           builds_succeeded, builds_total } or null on hard failure.
+export def lp-ppa-detail [user: string, ppa: string]: nothing -> any {
+    let path = (cache-file "ppa-detail" $"($user)-($ppa).json")
+    let cached = (cache-load $path 5min)
+    if ($cached | is-not-empty) { return $cached }
+
+    let base = $"($LP_API)/~($user)/+archive/ubuntu/($ppa)"
+
+    let pub_raw = (^curl -sfG $base
+        --data-urlencode "ws.op=getPublishedSources"
+        --data-urlencode "status=Published"
+        --data-urlencode "order_by_date=true"
+        --data-urlencode "ws.size=75"
+        | complete)
+    let pub = if $pub_raw.exit_code == 0 {
+        try { $pub_raw.stdout | from json } catch { null }
+    } else { null }
+    let pub_entries = ($pub | get -o entries | default [])
+    let sources = ($pub | get -o total_size | default ($pub_entries | length))
+    let last_upload = ($pub_entries | get -o 0.date_published | default "")
+    let series = ($pub_entries | each {|e| series-from-link ($e | get -o distro_series_link) } | where { $in != "" } | uniq)
+
+    let bc_raw = (^curl -sfG $base
+        --data-urlencode "ws.op=getBuildCounters"
+        | complete)
+    let bc = if $bc_raw.exit_code == 0 {
+        try { $bc_raw.stdout | from json } catch { null }
+    } else { null }
+
+    let detail = {
+        sources: $sources
+        last_upload: $last_upload
+        series: $series
+        builds_pending: ($bc | get -o pending | default 0)
+        builds_failed: ($bc | get -o failed | default 0)
+        builds_succeeded: ($bc | get -o succeeded | default 0)
+        builds_total: ($bc | get -o total | default 0)
+    }
+    cache-save $path $detail
+    $detail
+}

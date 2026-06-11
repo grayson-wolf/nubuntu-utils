@@ -32,6 +32,27 @@ export def days-to-duration [days: number]: nothing -> duration {
     $minutes * 60_000_000_000 | into duration
 }
 
+# Green ✓ / dim · glyph for a boolean. `--invert` swaps semantics.
+export def bool-glyph [b: bool, --invert]: nothing -> string {
+    let v = if $invert { not $b } else { $b }
+    if $v { $"(ansi green)✓(ansi reset)" } else { $"(ansi dark_gray)·(ansi reset)" }
+}
+
+# Format MiB as a human size: 8192 -> "8 GiB", 500 -> "500 MiB".
+export def fmt-mib [mib: int]: nothing -> string {
+    if $mib >= 1024 { $"((($mib / 1024) | math round)) GiB" } else { $"($mib) MiB" }
+}
+
+# Format an ISO timestamp as relative ("21h ago", "3d ago", "2w ago"),
+# or "YYYY-MM-DD" for ages >90 days. Empty input returns "".
+export def fmt-relative [iso: string]: nothing -> string {
+    if ($iso | is-empty) { return "" }
+    let dt = (try { $iso | into datetime } catch { null })
+    if $dt == null { return $iso }
+    let age = ((date now) - $dt)
+    if $age < 1day { $"((($age / 1hr) | math round))h ago" } else if $age < 30day { $"((($age / 1day) | math round))d ago" } else if $age < 90day { $"((($age / 7day) | math round))w ago" } else { ($dt | format date "%Y-%m-%d") }
+}
+
 # Convert a gum-style color spec to an ANSI SGR foreground escape.
 # Accepts:
 #   - "#rrggbb"   → 24-bit truecolor

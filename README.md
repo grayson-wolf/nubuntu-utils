@@ -135,7 +135,7 @@ excuses libsdl3 | where package =~ "freerdp"
 | `my` | Show available `my` subcommands |
 | `my excuses` | Proposed-migration excuses for packages you uploaded/sponsored |
 | `my srus` | SRUs you signed or created (filtered `sru-list`) |
-| `my ppas` | PPAs you own on Launchpad |
+| `my ppas` | PPAs you own on Launchpad (pass `-d` for sources/uploads/builds) |
 
 ### Patches (`q` subcommands)
 
