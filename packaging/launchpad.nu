@@ -97,3 +97,56 @@ export def normalize-ppa-name [ppa_name: string]: nothing -> string {
         $"($env.LAUNCHPAD_NAME)/($ppa_name)"
     }
 }
+
+# Walk the Launchpad pagination chain for a person's `ppas` collection.
+# Returns the full list of LP entry records.
+export def lp-paginate-ppas [user: string]: nothing -> list {
+    let first_url = $"($LP_API)/~($user)/ppas?ws.size=75"
+    mut out = []
+    mut url = $first_url
+    loop {
+        let raw = (^curl -sfL $url | complete)
+        if $raw.exit_code != 0 { break }
+        let page = (try { $raw.stdout | from json } catch { null })
+        if ($page | is-empty) { break }
+        let entries = ($page | get -o entries | default [])
+        $out = ($out | append $entries)
+        let next = ($page | get -o next_collection_link | default "")
+        if ($next | is-empty) { break }
+        $url = $next
+    }
+    $out
+}
+
+def lp-ppa-cache-path [user: string]: nothing -> string {
+    let dir = ($env.NUBUNTU_CACHE_DIR | default ("~/.cache/nubuntu-utils" | path expand))
+    if not ($dir | path exists) { mkdir $dir }
+    [$dir $"ppas-($user).json"] | path join
+}
+
+# LP PPA entries for a user, with a 5-minute disk cache. Powers both
+# `my ppas` (full entries) and `ppa-completions` (just names).
+export def lp-ppa-entries [user?: string]: nothing -> list {
+    let me = if ($user | is-empty) { $env.LAUNCHPAD_NAME? | default "" } else { $user }
+    if ($me | is-empty) { return [] }
+    let path = (lp-ppa-cache-path $me)
+    let fresh = if ($path | path exists) {
+        let age = ((date now) - (ls $path | get 0.modified))
+        $age < 5min
+    } else { false }
+    if $fresh {
+        let cached = (try { open $path } catch { null })
+        if ($cached | is-not-empty) { return $cached }
+    }
+    let entries = (lp-paginate-ppas $me)
+    if ($entries | is-not-empty) {
+        $entries | save -f $path
+    }
+    $entries
+}
+
+# Convenience: just the PPA names for `user` (default $env.LAUNCHPAD_NAME).
+# Used by the `ppa-completions` completer.
+export def lp-ppa-names [user?: string]: nothing -> list<string> {
+    lp-ppa-entries $user | get -o name | default []
+}

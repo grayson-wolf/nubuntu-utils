@@ -1,15 +1,16 @@
 # Shared custom completers for packaging commands
 
 use ubuntu-versions.nu [SUPPORTED_RELEASES]
+use packaging/launchpad.nu [lp-ppa-names]
 
 # Supported Ubuntu release names
 export def release-completions []: nothing -> list<string> {
     $SUPPORTED_RELEASES
 }
 
-# Existing PPAs from `ppa list`
+# Your PPAs on Launchpad (cached 5min). Backed by `my ppas` / `p list`.
 export def ppa-completions []: nothing -> list<string> {
-    do --ignore-errors { ppa list | lines | where { $in != "" } } | default []
+    do --ignore-errors { lp-ppa-names } | default []
 }
 
 # Locally-cloned package names from $NUBUNTU_PKGS_DIR (default ~/pkgs/)

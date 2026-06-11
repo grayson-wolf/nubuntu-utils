@@ -13,12 +13,10 @@ use packaging/tests/migration.nu [
     build-autopkgtest-rows,
 ]
 use packaging/sru.nu [fetch-sru-entries, build-sru-rows, print-sru-legend]
-use packaging/launchpad.nu [uploader-data]
+use packaging/launchpad.nu [uploader-data, lp-ppa-entries]
 use completions.nu [release-completions]
 use formatting.nu [osc8-link, with-spinner]
 use ubuntu-versions.nu [DEVEL_RELEASE, LATEST_STABLE_RELEASE]
-
-const LP_API = "https://api.launchpad.net/devel"
 
 # Resolve the user: explicit `--user` wins, else $env.LAUNCHPAD_NAME.
 def resolve-user [user: string]: nothing -> string {
@@ -155,23 +153,8 @@ export def "my srus" [
 }
 
 # Walk the Launchpad pagination chain for a person's `ppas` collection.
-def lp-paginate-ppas [user: string]: nothing -> list {
-    let first_url = $"($LP_API)/~($user)/ppas?ws.size=75"
-    mut out = []
-    mut url = $first_url
-    loop {
-        let raw = (^curl -sfL $url | complete)
-        if $raw.exit_code != 0 { break }
-        let page = (try { $raw.stdout | from json } catch { null })
-        if ($page | is-empty) { break }
-        let entries = ($page | get -o entries | default [])
-        $out = ($out | append $entries)
-        let next = ($page | get -o next_collection_link | default "")
-        if ($next | is-empty) { break }
-        $url = $next
-    }
-    $out
-}
+# (Pagination + caching live in `packaging/launchpad.nu` so the same data
+# powers both `my ppas` and `ppa-completions` without circular imports.)
 
 # List PPAs owned by you (or `-u <user>`) on Launchpad.
 # Returns one row per PPA: name, displayname, status, private flag, and a
@@ -181,7 +164,7 @@ export def "my ppas" [
     --raw (-r)                # Return the raw LP entry records
 ]: nothing -> any {
     let me = (resolve-user $user)
-    let entries = (with-spinner $"Fetching PPAs for ($me)..." { lp-paginate-ppas $me })
+    let entries = (with-spinner $"Fetching PPAs for ($me)..." { lp-ppa-entries $me })
     if ($entries | is-empty) {
         print -e $"(ansi yellow)No PPAs for ($me).(ansi reset)"
         return []
