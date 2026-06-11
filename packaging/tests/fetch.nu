@@ -165,6 +165,7 @@ export def fetch-archive-test-runs [
     package: string
     arches: list<string>
     max_per_arch: int = 4
+    --with-requester                          # Add a `requester` column (one extra HTTP per run)
 ]: nothing -> table {
     let prefix = (package-prefix $package)
     let log_base = $"($AUTOPKGTEST_URL)/results/autopkgtest-($series)/($series)"
@@ -195,5 +196,32 @@ export def fetch-archive-test-runs [
         } | flatten
     )
     if ($entries | is-empty) { return [] }
-    $entries | fetch-and-parse-logs
+    let parsed = ($entries | fetch-and-parse-logs)
+    if not $with_requester { return $parsed }
+    $parsed | par-each --keep-order {|row|
+        let stamp_match = ($row.log_url | parse -r '(?P<id>\d{8}_\d{6}_[a-z0-9]+)')
+        let run_id = if ($stamp_match | is-empty) { "" } else { $stamp_match | first | get id }
+        $row | insert requester (fetch-run-requester $package $series $row.arch $run_id)
+    }
+}
+
+# Fetch the `Requester` field from a run's detail HTML page.
+# Returns "" if the field is missing, "-" (migration-auto-triggered), or
+# the fetch fails.
+def fetch-run-requester [
+    package: string
+    series: string
+    arch: string
+    run_id: string
+]: nothing -> string {
+    if ($run_id | is-empty) { return "" }
+    let url = $"($AUTOPKGTEST_URL)/packages/($package)/($series)/($arch)/($run_id)@"
+    let html = (do --ignore-errors { http get $url } | default "")
+    if ($html | is-empty) { return "" }
+    let m = ($html | parse -r '(?s)Requester</th>\s*<td>(?P<r>.*?)</td>')
+    if ($m | is-empty) { return "" }
+    let val = ($m | first | get r | str trim)
+    # The HTML wraps the value in extra whitespace; strip tags as well.
+    let stripped = ($val | str replace -r -a '<[^>]+>' '' | str trim)
+    if $stripped == "-" or ($stripped | is-empty) { "" } else { $stripped }
 }

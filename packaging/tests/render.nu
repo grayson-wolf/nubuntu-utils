@@ -60,6 +60,19 @@ export def render-tests-tables [header_fn: closure, dedup_latest: bool = true]: 
             } else {
                 { arch: $r.arch, kind: $kind_cell, time: $time_str, log: $log_cell, overall: $overall_cell }
             }
+            if not $dedup_latest {
+                let trig_str = (
+                    ($r | get -o triggers | default [])
+                    | each {|t|
+                        if $t == "migration-reference/0" {
+                            $"(ansi attr_bold)(ansi purple)($t)(ansi reset)"
+                        } else { $t }
+                    }
+                    | str join " "
+                )
+                let req_str = ($r | get -o requester | default "")
+                $row = ($row | insert triggers $trig_str | insert requester $req_str)
+            }
             for name in $subtest_names {
                 let match = ($r.subtests | where name == $name)
                 let cell = if ($match | is-empty) { "" } else {

@@ -40,7 +40,7 @@ export def archive-tests [
     # Fetch in parallel across series; tag each run with its series.
     let runs = with-spinner $"Fetching archive tests for ($pkg)..." {
         $series_list | par-each {|s|
-            fetch-archive-test-runs $s $pkg $arches $max_per_arch
+            (fetch-archive-test-runs $s $pkg $arches $max_per_arch --with-requester=$history)
             | each {|r| $r | insert series $s }
         } | flatten
     }

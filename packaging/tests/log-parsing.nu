@@ -59,13 +59,13 @@ export def package-prefix [package: string]: nothing -> string {
 # Returns {kind: "base"|"proposed", overall: string, subtests: list<{name, status}>}
 export def parse-autopkgtest-log [log: string]: nothing -> record {
     if ($log | is-empty) {
-        return { kind: "base", overall: "BAD", subtests: [] }
+        return { kind: "base", overall: "BAD", subtests: [], triggers: [] }
     }
     let summary_split = ($log | split row "@@@@@@@@@@@@@@@@@@@@ summary")
     if ($summary_split | length) < 2 {
         # No summary section means run_tests() never completed → infrastructure failure
         # (testbed bomb, network error, exception during setup, etc.)
-        return { kind: (detect-kind $log), overall: "TMPFAIL", subtests: [] }
+        return { kind: (detect-kind $log), overall: "TMPFAIL", subtests: [], triggers: [] }
     }
     let summary = ($summary_split | last)
 
@@ -124,7 +124,15 @@ export def parse-autopkgtest-log [log: string]: nothing -> record {
     # Detect base vs proposed: --all-proposed adds proposed pocket to the testbed
     let kind = (detect-kind ($summary_split | first))
 
-    { kind: $kind, overall: $overall, subtests: $subtests }
+    # Extract ADT_TEST_TRIGGERS from the host/command-line region (first
+    # few lines). Format: --env=ADT_TEST_TRIGGERS=foo/1.0,bar/2.0
+    let head = ($log | lines | first 30 | str join "\n")
+    let trig_match = ($head | parse -r '--env=?ADT_TEST_TRIGGERS=(?P<t>\S+)')
+    let triggers = if ($trig_match | is-empty) { [] } else {
+        $trig_match | first | get t | split row "," | each { str trim } | where { $in != "" }
+    }
+
+    { kind: $kind, overall: $overall, subtests: $subtests, triggers: $triggers }
 }
 
 # Convert various autopkgtest URL forms to the raw log.gz URL.
@@ -166,7 +174,7 @@ export def parse-run-timestamp [stamp: string]: nothing -> datetime {
 
 # Fetch and parse logs for a list of run records (source-agnostic).
 # Input rows: {source, arch, stamp, log_url}
-# Output rows: {source, arch, kind, time, log_url, overall, subtests}
+# Output rows: {source, arch, kind, time, log_url, overall, subtests, triggers}
 export def fetch-and-parse-logs []: table -> table {
     $in | par-each {|r|
         let fetched = (^curl -fs $r.log_url | complete)
@@ -183,6 +191,7 @@ export def fetch-and-parse-logs []: table -> table {
             log_url:  $r.log_url
             overall:  $parsed.overall
             subtests: $parsed.subtests
+            triggers: $parsed.triggers
         }
     }
 }
