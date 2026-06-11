@@ -119,9 +119,12 @@ export def lp-paginate-ppas [user: string]: nothing -> list {
 }
 
 def lp-ppa-cache-path [user: string]: nothing -> string {
-    let dir = ($env.NUBUNTU_CACHE_DIR | default ("~/.cache/nubuntu-utils" | path expand))
+    let base = ($env.NUBUNTU_CACHE_DIR | default ("~/.cache/nubuntu-utils" | path expand))
+    let dir = ([$base "ppas"] | path join)
     if not ($dir | path exists) { mkdir $dir }
-    [$dir $"ppas-($user).json"] | path join
+    let stale = ([$base $"ppas-($user).json"] | path join)
+    if ($stale | path exists) { try { rm -f $stale } }
+    [$dir $"($user).json"] | path join
 }
 
 # LP PPA entries for a user, with a 5-minute disk cache. Powers both
