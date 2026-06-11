@@ -46,6 +46,7 @@ parts:
       ubuntu-versions.nu: nubuntu-utils/ubuntu-versions.nu
       formatting.nu: nubuntu-utils/formatting.nu
       deprecated.nu: nubuntu-utils/deprecated.nu
+      my.nu: nubuntu-utils/my.nu
       packaging/: nubuntu-utils/packaging/
       snap/wrappers/: wrappers/
       snap/bin/launch: bin/launch
@@ -61,6 +62,9 @@ parts:
 apps:
   excuses:
     command: bin/launch excuses
+
+  my:
+    command: bin/launch my
 
   my-excuses:
     command: bin/launch my-excuses

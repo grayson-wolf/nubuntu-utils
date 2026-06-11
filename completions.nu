@@ -18,3 +18,8 @@ export def pkg-completions []: nothing -> list<string> {
     if not ($pkgs_dir | path exists) { return [] }
     ls $pkgs_dir | where type == dir | get name | each { path basename }
 }
+
+# Subcommands of `my`.
+export def my-subcommand-completions []: nothing -> list<string> {
+    ["excuses" "srus" "ppas"]
+}

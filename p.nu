@@ -7,12 +7,14 @@ use completions.nu [ppa-completions]
 use packaging/launchpad.nu [normalize-ppa-name]
 use ubuntu-versions.nu [DEVEL_RELEASE]
 use formatting.nu [with-spinner]
+use my.nu ["my ppas"]
 
 # PPA workflow commands. Run bare `p` to see available subcommands.
 export def main []: nothing -> nothing {
     print "PPA workflow commands. Available subcommands:\n"
     print "  p build    — Clean, fetch orig, build source, upload to fresh PPA"
     print "  p up       — Create PPA, dput, wait, autotest, notify, show status"
+    print "  p list     — List PPAs you own on Launchpad (alias of `my ppas`)"
     print "  p reap     — Destroy all PPAs matching a package substring"
     print "  p destroy  — Destroy a single PPA by name"
     print "  p test     — Submit autopkgtest requests (local or named PPA)"
@@ -20,6 +22,15 @@ export def main []: nothing -> nothing {
     print "  p name     — Print the generated PPA name"
     print "  p sync     — Test a Debian sync via PPA build"
     print $"\nRun `p <subcommand> --help` for details."
+}
+
+# List PPAs you own on Launchpad. Thin wrapper over `my ppas` so the PPA
+# lifecycle commands share a discovery surface.
+export def list [
+    --user (-u): string = ""  # LP username (default: $env.LAUNCHPAD_NAME)
+    --raw (-r)                # Return the raw LP entry records
+]: nothing -> any {
+    my ppas --user $user --raw=$raw
 }
 
 # Print the deterministic PPA name generated from the current package, release, and .changes hash.

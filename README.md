@@ -118,13 +118,24 @@ excuses libsdl3 | where package =~ "freerdp"
 | Command | Description |
 |---|---|
 | `excuses` | Show proposed-migration status with a colorized autopkgtest table |
-| `my-excuses` | Show proposed-migration status for all packages whose uploading you're involved in |
 | `excuses-clusters` | Show the largest co-migration transition clusters blocking proposed |
 | `archive-tests` | Show autopkgtest results for an archive package (single-series table or cross-series matrix) |
 | `retry-regressions` | Retry autopkgtest regressions blocking (or blocked by) a package |
 | `sru-list` | Show pending SRUs for a series with colored/clickable bug status |
 | `testin` | Run autopkgtests in a local LXD container |
 | `testurl` | Display clickable autopkgtest request URLs for the current package |
+
+### Personal lenses (`my` subcommands)
+
+`my <thing>` filters a global packaging view to a Launchpad user
+(default `$env.LAUNCHPAD_NAME`, overridable per-subcommand with `-u`).
+
+| Command | Description |
+|---|---|
+| `my` | Show available `my` subcommands |
+| `my excuses` | Proposed-migration excuses for packages you uploaded/sponsored |
+| `my srus` | SRUs you signed or created (filtered `sru-list`) |
+| `my ppas` | PPAs you own on Launchpad |
 
 ### Patches (`q` subcommands)
 

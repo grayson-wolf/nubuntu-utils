@@ -3,8 +3,10 @@
 
 use p.nu
 use q.nu
+use my.nu ["my excuses"]
 use packaging/navigation.nu [pkg]
-use completions.nu [ppa-completions]
+use completions.nu [release-completions, ppa-completions]
+use ubuntu-versions.nu [DEVEL_RELEASE]
 
 def deprecation-warning [old: string, new: string]: nothing -> nothing {
     print -e $"(ansi yellow_bold)⚠ `($old)` is deprecated, use `($new)` instead(ansi reset)"
@@ -171,4 +173,19 @@ export def debpatch [
 ]: nothing -> nothing {
     deprecation-warning "debpatch" "q diff"
     q diff $patch_name --sid=$sid
+}
+
+# Legacy wrapper for `my excuses`
+# Deprecated 2026-06-11
+export def my-excuses [
+    --series (-s): string@release-completions = $DEVEL_RELEASE
+    --user (-u): string = ""
+    --detailed (-D)
+    --why (-w)
+    --failing (-f)
+    --limit (-n): int = 0
+    --raw (-r)
+]: nothing -> any {
+    deprecation-warning "my-excuses" "my excuses"
+    my excuses --series $series --user $user --detailed=$detailed --why=$why --failing=$failing --limit $limit --raw=$raw
 }
