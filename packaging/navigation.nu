@@ -2,6 +2,7 @@
 
 use ../completions.nu [pkg-completions]
 use ../formatting.nu [with-spinner]
+use cache.nu *
 use build.nu [tarme]
 
 # Make a directory and immediately enter it.
@@ -43,24 +44,13 @@ export def --env pkg [
 export def poc [
   package: string # The package to check
 ]: nothing -> list<string> {
-  let cache_file = ([$env.NUBUNTU_CACHE_DIR "package-team-mapping.nuon"] | path join)
-  let max_age = 1day
-
-  # Use cached file if fresh enough
-  let use_cache = if ($cache_file | path exists) {
-      let age = (date now) - ($cache_file | path expand | ls $in | first | get modified)
-      $age < $max_age
-  } else {
-      false
-  }
-
-  let data = if $use_cache {
-      open $cache_file
-  } else {
+  let cache_file = (cache-file-flat "package-team-mapping.nuon")
+  let cached = (cache-load $cache_file 1day)
+  let data = if $cached != null { $cached } else {
       let json = with-spinner "Fetching package-team mapping..." {
           http get https://static-reports.ubuntu.com/package-team-mapping.json
       }
-      $json | save -f $cache_file
+      cache-save $cache_file $json
       $json
   }
 

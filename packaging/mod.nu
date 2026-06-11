@@ -1,4 +1,5 @@
 # Module index for packaging commands
+export use cache.nu *
 export use meta.nu *
 export use build.nu *
 export use changelog.nu *

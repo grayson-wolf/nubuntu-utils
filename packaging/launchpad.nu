@@ -2,19 +2,13 @@
 # Anonymous read-only queries against the LP REST API; cached on disk where
 # the underlying data is immutable.
 
+use cache.nu *
+
 const LP_API = "https://api.launchpad.net/devel"
 
-# Cache directory for LP publication records (immutable once published).
-def lp-pub-cache-dir []: nothing -> string {
-    let dir = ([$env.NUBUNTU_CACHE_DIR "lp-publications"] | path join)
-    if not ($dir | path exists) { mkdir $dir }
-    $dir
-}
-
 # Make a filesystem-safe filename for a (package, version) cache key.
-def cache-key [package: string, version: string]: nothing -> string {
-    let safe_ver = ($version | str replace --all ":" "_" | str replace --all "/" "_" | str replace --all "~" "_")
-    $"($package)_($safe_ver).json"
+def pub-cache-key [package: string, version: string]: nothing -> string {
+    $"($package)_(cache-key $version).json"
 }
 
 # Extract the bare LP username (~slug) from a person link like
@@ -34,13 +28,13 @@ export def lp-source-publication [
     package: string
     version: string
 ]: nothing -> any {
-    let key = (cache-key $package $version)
-    let cache_file = ([(lp-pub-cache-dir) $key] | path join)
+    let key = (pub-cache-key $package $version)
+    let cache_file = (cache-file "lp-publications" $key)
     if ($cache_file | path exists) {
-        let cached = (open $cache_file)
+        let cached = (try { open $cache_file } catch { null })
         # Cached "null" sentinel means we already confirmed nothing exists.
         if ($cached | describe) == "string" and $cached == "null" { return null }
-        return $cached
+        if $cached != null { return $cached }
     }
     let url = $"($LP_API)/ubuntu/+archive/primary"
     let raw = (curl -sG $url
@@ -62,10 +56,10 @@ export def lp-source-publication [
     let entries = ($parsed | get -o entries | default [])
     let first = if ($entries | is-empty) { null } else { $entries | first }
     if ($first | is-empty) {
-        "null" | save -f $cache_file
+        cache-save $cache_file "null"
         return null
     }
-    $first | save -f $cache_file
+    cache-save $cache_file $first
     $first
 }
 
@@ -119,12 +113,10 @@ export def lp-paginate-ppas [user: string]: nothing -> list {
 }
 
 def lp-ppa-cache-path [user: string]: nothing -> string {
-    let base = ($env.NUBUNTU_CACHE_DIR | default ("~/.cache/nubuntu-utils" | path expand))
-    let dir = ([$base "ppas"] | path join)
-    if not ($dir | path exists) { mkdir $dir }
-    let stale = ([$base $"ppas-($user).json"] | path join)
+    # One-shot migration: remove pre-subdir flat file if present.
+    let stale = (cache-file-flat $"ppas-($user).json")
     if ($stale | path exists) { try { rm -f $stale } }
-    [$dir $"($user).json"] | path join
+    cache-file "ppas" $"($user).json"
 }
 
 # LP PPA entries for a user, with a 5-minute disk cache. Powers both
@@ -133,17 +125,11 @@ export def lp-ppa-entries [user?: string]: nothing -> list {
     let me = if ($user | is-empty) { $env.LAUNCHPAD_NAME? | default "" } else { $user }
     if ($me | is-empty) { return [] }
     let path = (lp-ppa-cache-path $me)
-    let fresh = if ($path | path exists) {
-        let age = ((date now) - (ls $path | get 0.modified))
-        $age < 5min
-    } else { false }
-    if $fresh {
-        let cached = (try { open $path } catch { null })
-        if ($cached | is-not-empty) { return $cached }
-    }
+    let cached = (cache-load $path 5min)
+    if ($cached | is-not-empty) { return $cached }
     let entries = (lp-paginate-ppas $me)
     if ($entries | is-not-empty) {
-        $entries | save -f $path
+        cache-save $path $entries
     }
     $entries
 }
