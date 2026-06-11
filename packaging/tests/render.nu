@@ -40,7 +40,7 @@ export def render-tests-tables [header_fn: closure, dedup_latest: bool = true]: 
         let subtest_names = (
             $ordered
             | reduce --fold [] {|r, acc|
-                let names = ($r.subtests | get name)
+                let names = ($r.subtests | get name | uniq)
                 $acc | append ($names | where { $in not-in $acc })
             }
         )
