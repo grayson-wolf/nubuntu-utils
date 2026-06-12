@@ -24,3 +24,33 @@ export def pkg-completions []: nothing -> list<string> {
 export def my-subcommand-completions []: nothing -> list<string> {
     ["excuses" "srus" "ppas"]
 }
+
+# Local git branch names (for --from-branch and other ref flags).
+export def git-branch-completions []: nothing -> list<string> {
+    let res = (git branch --format '%(refname:short)' | complete)
+    if $res.exit_code != 0 { return [] }
+    $res.stdout | lines | each { str trim } | where { $in | is-not-empty }
+}
+
+# Read the patch series of a given git ref without checking it out.
+def series-for-ref [ref: string]: nothing -> list<string> {
+    let res = (git show $"($ref):debian/patches/series" | complete)
+    if $res.exit_code != 0 { return [] }
+    $res.stdout | lines | each { str trim } | where { ($in | is-not-empty) and not ($in | str starts-with '#') }
+}
+
+# Patch names available to transplant via `q shunt <branch> <patch>`.
+# The source branch is the positional just typed before this one, so it's the
+# last bare token on the line; list that branch's series. If no branch is
+# resolvable yet, fall back to the union across all local branches.
+export def shunt-patch-completions [context: string]: nothing -> list<string> {
+    let branches = (git-branch-completions)
+    let tokens = ($context | str trim | split row -r '\s+')
+    let branch = ($tokens | reverse | where { $in in $branches } | get 0? | default "")
+
+    if ($branch | is-not-empty) {
+        return (series-for-ref $branch)
+    }
+
+    $branches | each { series-for-ref $in } | flatten | uniq
+}

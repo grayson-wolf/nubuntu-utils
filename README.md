@@ -151,6 +151,7 @@ excuses libsdl3 | where package =~ "freerdp"
 | `q top` | Show the topmost applied patch |
 | `q new` | Create a new auto-numbered quilt patch |
 | `q edit` | Register file, open in editor, refresh (add→edit→refresh cycle) |
+| `q shunt` | Transplant a patch from another branch into this series (auto-numbered, fuzz-0 apply check; `--file` for a loose patch) |
 | `q diff` | Generate an upstream-ready patch diff from the packaging branch |
 
 ### Dependency Analysis
