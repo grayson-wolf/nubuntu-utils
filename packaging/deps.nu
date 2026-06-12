@@ -190,25 +190,35 @@ export def dep-components [
     }
 }
 
-# Fetch reverse dependencies for a package.
-# Uses apt-cache to find all packages that depend on the given package.
+# Fetch reverse dependencies for a (binary or source) package.
+# Uses apt-cache rdepends directly for binary packages; falls back to
+# resolving source packages through their produced binaries and unioning.
 export def revdeps [
     package: string # The package to check reverse dependencies for
 ]: nothing -> list<string> {
     let raw = (with-spinner $"Fetching reverse dependencies for ($package)..." { apt-cache rdepends $package | complete })
-    if $raw.exit_code != 0 {
+    if $raw.exit_code == 0 {
+        let output = ($raw.stdout | lines)
+        if ($output | length) < 2 { return [] }
+        return ($output | skip 2 | each {|line|
+            $line | str trim | str replace -r '^[A-Za-z]+:\s*' ''
+        } | where { $in != "" } | uniq)
+    }
+
+    # Not a binary package — try resolving as a source package.
+    let bins = (source-binaries $package)
+    if ($bins | is-empty) {
         print -e $"(ansi yellow)No package '($package)' found by apt-cache.(ansi reset)"
         return []
     }
-    let output = ($raw.stdout | lines)
 
-    if ($output | length) < 2 {
-        return []
+    with-spinner $"Fetching reverse dependencies for ($package) source..." {
+        $bins | par-each {|b|
+            let r = (apt-cache rdepends $b | complete)
+            if $r.exit_code != 0 { return [] }
+            $r.stdout | lines | skip 2 | each {|line|
+                $line | str trim | str replace -r '^[A-Za-z]+:\s*' ''
+            } | where { $in != "" }
+        } | flatten | uniq
     }
-
-    # Skip header lines (package name and "Reverse Depends:")
-    # Each line may have a dependency type prefix like "Depends:", "Recommends:", etc.
-    $output | skip 2 | each {|line|
-        $line | str trim | str replace -r '^[A-Za-z]+:\s*' ''
-    } | where { $in != "" } | uniq
 }
