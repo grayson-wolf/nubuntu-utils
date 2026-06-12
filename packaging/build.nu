@@ -46,7 +46,7 @@ export def tarme []: nothing -> nothing {
 # Cleans up the generated .deb, .buildinfo, and .changes files afterward.
 export def getdeps []: nothing -> nothing {
     let pkg_name = pkg-name
-    sudo mk-build-deps --install --tool="apt-get -o Debug::pkgProblemResolver=yes --no-install-recommends -y"
+    gum spin --show-error --title $"Installing build dependencies for ($pkg_name)..." -- sudo mk-build-deps --install --tool="apt-get -o Debug::pkgProblemResolver=yes --no-install-recommends -y"
     glob $"($pkg_name)-build-deps_*.deb" | each { rm -f $in }
     glob $"($pkg_name)-build-deps_*.buildinfo" | each { rm -f $in }
     glob $"($pkg_name)-build-deps_*.changes" | each { rm -f $in }
@@ -105,9 +105,9 @@ export def test-urls [
 export def buildin [
     distro: string@release-completions # The distro to build in (e.g., noble, resolute, stonking)
 ]: nothing -> nothing {
-    sudo autopkgtest-build-lxd $"ubuntu-daily:($distro)"
+    gum spin --show-error --title $"Building LXD image for ($distro)..." -- sudo autopkgtest-build-lxd $"ubuntu-daily:($distro)"
     cpbd
     tarme
-    debuild -S -sa -d
-    sudo autopkgtest ../*.dsc --copy $"(pwd)/.." -- lxd $"autopkgtest/ubuntu/($distro)/amd64"
+    gum spin --show-error --title $"Building source for ($distro)..." -- debuild -S -sa -d
+    gum spin --show-error --title $"Running autopkgtest for ($distro)..." -- sudo autopkgtest ../*.dsc --copy $"(pwd)/.." -- lxd $"autopkgtest/ubuntu/($distro)/amd64"
 }

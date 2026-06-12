@@ -1,5 +1,7 @@
 # Dependency pocket/component analysis commands
 
+use ../formatting.nu [with-spinner]
+
 # Get the archive component for a real binary package via apt-cache policy.
 # Returns "" if no candidate component is found (likely a virtual package).
 def policy-component [pkg: string]: nothing -> string {
@@ -193,7 +195,12 @@ export def dep-components [
 export def revdeps [
     package: string # The package to check reverse dependencies for
 ]: nothing -> list<string> {
-    let output = apt-cache rdepends $package | lines
+    let raw = (with-spinner $"Fetching reverse dependencies for ($package)..." { apt-cache rdepends $package | complete })
+    if $raw.exit_code != 0 {
+        print -e $"(ansi yellow)No package '($package)' found by apt-cache.(ansi reset)"
+        return []
+    }
+    let output = ($raw.stdout | lines)
 
     if ($output | length) < 2 {
         return []

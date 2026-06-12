@@ -25,10 +25,10 @@ export def ppa-test-urls [
 # Run autopkgtests in a specific distro's lxd image.
 # Defaults to the current development release.
 export def testin [
-  distro: string@release-completions = $DEVEL_RELEASE # The distro to test in
+    distro: string@release-completions = $DEVEL_RELEASE # The distro to test in
 ]: nothing -> nothing {
-  sudo autopkgtest-build-lxd $"ubuntu-daily:($distro)"
-  sudo autopkgtest . --shell-fail -- lxd $"autopkgtest/ubuntu/($distro)/amd64"
+    gum spin --show-error --title $"Building LXD image for ($distro)..." -- sudo autopkgtest-build-lxd $"ubuntu-daily:($distro)"
+    sudo autopkgtest . --shell-fail -- lxd $"autopkgtest/ubuntu/($distro)/amd64"
 }
 
 # Display autopkgtest request URLs for the current package's PPA upload across all architectures.
