@@ -2,14 +2,14 @@
 # Pure filesystem; no HTTP, no LP knowledge. Single owner of cache paths.
 
 # Cache root with safe fallback to ~/.cache/nubuntu-utils.
-export def cache-root []: nothing -> string {
+def cache-root []: nothing -> string {
     let root = ($env.NUBUNTU_CACHE_DIR? | default ("~/.cache/nubuntu-utils" | path expand))
     if not ($root | path exists) { mkdir $root }
     $root
 }
 
 # Resolve (and ensure) a kind subdirectory: <root>/<kind>/.
-export def cache-dir [kind: string]: nothing -> string {
+def cache-dir [kind: string]: nothing -> string {
     let dir = ([(cache-root) $kind] | path join)
     if not ($dir | path exists) { mkdir $dir }
     $dir

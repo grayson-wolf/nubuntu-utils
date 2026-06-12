@@ -94,7 +94,7 @@ export def normalize-ppa-name [ppa_name: string]: nothing -> string {
 
 # Walk the Launchpad pagination chain for a person's `ppas` collection.
 # Returns the full list of LP entry records.
-export def lp-paginate-ppas [user: string]: nothing -> list {
+def lp-paginate-ppas [user: string]: nothing -> list {
     let first_url = $"($LP_API)/~($user)/ppas?ws.size=75"
     mut out = []
     mut url = $first_url
