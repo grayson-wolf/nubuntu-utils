@@ -27,6 +27,7 @@ export def ppa-test-urls [
 export def testin [
     distro: string@release-completions = $DEVEL_RELEASE # The distro to test in
 ]: nothing -> nothing {
+    sudo -v
     gum spin --show-error --title $"Building LXD image for ($distro)..." -- sudo autopkgtest-build-lxd $"ubuntu-daily:($distro)"
     sudo autopkgtest . --shell-fail -- lxd $"autopkgtest/ubuntu/($distro)/amd64"
 }
