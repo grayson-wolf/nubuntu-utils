@@ -3,6 +3,16 @@
 use ../../formatting.nu [osc8-link]
 use log-parsing.nu [format-subtest]
 
+# Keep only the most recent run per (series, source, arch, kind). Input rows
+# may omit `series` (treated as ""). Shared by the raw paths of `p tests` /
+# `archive-tests` and by this module's table renderer.
+export def dedup-latest-runs []: table -> table {
+    $in
+    | sort-by time --reverse
+    | group-by --to-table { |r| $"(($r | get -o series | default ''))|($r.source)|($r.arch)|($r.kind)" }
+    | each {|g| $g.items | first }
+}
+
 # Shared renderer: per-source tables with one column per subtest.
 # `header_fn` is a closure (string -> string) that builds the header from a
 # source package name. Prints headers to stderr and returns the rendered
@@ -19,10 +29,7 @@ export def render-tests-tables [header_fn: closure, dedup_latest: bool = true]: 
     )
 
     let prepared = if $dedup_latest {
-        $runs
-        | sort-by time --reverse
-        | group-by --to-table { |r| $"(($r | get -o series | default ''))|($r.source)|($r.arch)|($r.kind)" }
-        | each {|g| $g.items | first }
+        $runs | dedup-latest-runs
     } else {
         # History mode: time desc (most recent first), then arch asc (stable sort).
         $runs | sort-by source arch | sort-by time --reverse

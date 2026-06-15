@@ -4,6 +4,7 @@ use meta.nu [target-release, pkg-upstream-version, pkg-version, pkg-name]
 use launchpad.nu [normalize-ppa-name]
 use ../formatting.nu [osc8-link]
 use ../ubuntu-versions.nu [ARCHES]
+use tests/log-parsing.nu [request-url]
 
 # Clear Parent Build Directory
 # wipes debbuilds from the parent directory
@@ -86,15 +87,20 @@ export def test-urls [
         $arches
     }
 
-    let trigger = $"($pkg_name)/($version)" | url encode
-    let ppa_param = (normalize-ppa-name $ppa) | url encode
+    let ppa_param = (normalize-ppa-name $ppa)
 
     mut urls = []
     for arch in $arches {
-        let base_url = $"https://autopkgtest.ubuntu.com/request.cgi?release=($release_name)&package=($pkg_name)&arch=($arch)&trigger=($trigger)&ppa=($ppa_param)&"
-        $urls = ($urls | append { arch: $arch, url: $base_url, proposed: false })
+        let params = {
+            release: $release_name
+            package: $pkg_name
+            arch: $arch
+            trigger: $"($pkg_name)/($version)"
+            ppa: $ppa_param
+        }
+        $urls = ($urls | append { arch: $arch, url: (request-url $params), proposed: false })
         if $proposed {
-            $urls = ($urls | append { arch: $arch, url: $"($base_url)all-proposed=1", proposed: true })
+            $urls = ($urls | append { arch: $arch, url: (request-url ($params | insert all-proposed "1")), proposed: true })
         }
     }
     $urls

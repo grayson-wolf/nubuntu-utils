@@ -3,6 +3,7 @@
 # `use packaging/tests *` (or import specific names) as before.
 
 export use migration.nu *
+export use excuses-format.nu *
 export use autopkgtest.nu *
 export use log-parsing.nu *
 export use fetch.nu *

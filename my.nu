@@ -5,10 +5,10 @@
 # overridable with `-u`).
 
 use packaging/tests/fetch.nu [fetch-excuses]
-use packaging/tests/migration.nu [
+use packaging/tests/excuses-format.nu [
     classify-role,
     format-role,
-    format-verdict-compact,
+    format-verdict,
     summarize-issues,
     build-autopkgtest-rows,
 ]
@@ -102,7 +102,7 @@ export def "my excuses" [
             source: $c.source
             "new-version": ($c | get -o new-version)
             role: (format-role $c.role)
-            verdict: (format-verdict-compact ($c | get migration-policy-verdict))
+            verdict: (format-verdict ($c | get migration-policy-verdict) --compact)
             issues: (summarize-issues $c)
         }
     })

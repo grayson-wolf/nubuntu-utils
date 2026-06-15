@@ -6,7 +6,7 @@ use ../../ubuntu-versions.nu [DEVEL_RELEASE, SUPPORTED_RELEASES, ARCHES]
 use ../../formatting.nu [with-spinner]
 use ../meta.nu [pkg-name]
 use fetch.nu [fetch-archive-test-runs]
-use render.nu [render-tests-tables, render-tests-matrix]
+use render.nu [render-tests-tables, render-tests-matrix, dedup-latest-runs]
 
 const DEFAULT_SERIES = [$DEVEL_RELEASE]
 
@@ -53,10 +53,7 @@ export def archive-tests [
         let prepared = if $history {
             $runs | sort-by time --reverse
         } else {
-            $runs
-            | sort-by time --reverse
-            | group-by --to-table { |r| $"($r.series)|($r.source)|($r.arch)|($r.kind)" }
-            | each {|g| $g.items | first }
+            $runs | dedup-latest-runs
         }
         return $prepared
     }

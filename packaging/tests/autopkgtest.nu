@@ -2,10 +2,12 @@
 # interactive selection, and regression retry.
 
 use ../meta.nu [pkg-name]
-use ../../completions.nu [pkg-completions]
-use ../../ubuntu-versions.nu [DEVEL_RELEASE]
+use ../navigation.nu [poc]
+use ../../completions.nu [pkg-completions, release-completions]
+use ../../ubuntu-versions.nu [DEVEL_RELEASE, ARCHES]
 use ../cache.nu [cache-file-flat]
 use fetch.nu [fetch-excuses]
+use log-parsing.nu [request-url]
 
 # Return the expanded autopkgtest cookie path (does not check existence).
 export def autopkgtest-cookie-path []: nothing -> string {
@@ -87,7 +89,7 @@ def collect-regressions [data: record, series: string, all_proposed: bool]: noth
                 trigger: $trigger
             }
             let params = if $all_proposed { $params | insert all-proposed "1" } else { $params }
-            $"https://autopkgtest.ubuntu.com/request.cgi?($params | url build-query)"
+            (request-url $params)
         }
     } | flatten
 }
@@ -158,4 +160,28 @@ export def retry-regressions [
     print $"Found ($urls | length) regression\(s\) ($mode) ($pkg)."
 
     select-and-submit $urls $cookie --no-select=$no_select --header $"Select regressions to retry for ($pkg):"
+}
+
+# Submit migration-reference/0 autopkgtests for a source package.
+# Requires an autopkgtest.ubuntu.com session cookie — see `retry-regressions --help`.
+export def migration-reference [
+    package?: string@pkg-completions              # Source package (defaults to cwd package)
+    --series (-s): string@release-completions = $DEVEL_RELEASE  # Ubuntu series
+]: nothing -> nothing {
+    let cookie = autopkgtest-cookie
+    let pkg = if ($package | is-empty) { pkg-name } else { $package }
+
+    # Check ownership and warn if teams are responsible for this package
+    let teams = poc $pkg
+    if not ($teams | is-empty) {
+        let teams_display = ($teams | each {|t| $"~($t)" } | str join ", ")
+        gum confirm $"($pkg) is owned by ($teams_display). Consult them before re-running migration-reference tests. Continue?"
+    }
+
+    # Build one URL per arch and submit via interactive selection
+    let urls = ($ARCHES | each {|arch|
+        request-url { release: $series, package: $pkg, arch: $arch, trigger: "migration-reference/0" }
+    })
+
+    select-and-submit $urls $cookie --header $"Select migration-reference tests for ($pkg) / ($series):"
 }

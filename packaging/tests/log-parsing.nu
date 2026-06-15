@@ -6,6 +6,13 @@
 
 export const AUTOPKGTEST_URL = "https://autopkgtest.ubuntu.com"
 
+# Build an autopkgtest request.cgi submission URL from a params record.
+# Values are query-encoded via `url build-query` (so pass raw, unencoded
+# values for `trigger`, `ppa`, etc.). Shared by every test-submission path.
+export def request-url [params: record]: nothing -> string {
+    $"($AUTOPKGTEST_URL)/request.cgi?($params | url build-query)"
+}
+
 # Format an autopkgtest subtest status with color (no emoji).
 export def format-subtest [status: string]: nothing -> string {
     let display = match $status {

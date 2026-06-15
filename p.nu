@@ -2,7 +2,7 @@
 
 use packaging/meta.nu [pkg-name, pkg-top-release, pkg-version, target-release]
 use packaging/build.nu [cpbd, tarme, getdeps, gen-ppa-name, test-urls, ppa-test-urls]
-use packaging/tests/ [autopkgtest-cookie, autopkgtest-cookie-path, submit-autopkgtest, select-and-submit, fetch-ppa-test-runs, fetch-ppa-running, fetch-ppa-waiting, render-tests-tables]
+use packaging/tests/ [autopkgtest-cookie, autopkgtest-cookie-path, submit-autopkgtest, select-and-submit, fetch-ppa-test-runs, fetch-ppa-running, fetch-ppa-waiting, render-tests-tables, dedup-latest-runs]
 use completions.nu [ppa-completions]
 use packaging/launchpad.nu [normalize-ppa-name]
 use ubuntu-versions.nu [DEVEL_RELEASE, SUPPORTED_RELEASES]
@@ -229,10 +229,7 @@ export def tests [
         let prepared = if $history {
             $runs | sort-by time --reverse
         } else {
-            $runs
-            | sort-by time --reverse
-            | group-by --to-table { |r| $"($r.series)|($r.source)|($r.arch)|($r.kind)" }
-            | each {|g| $g.items | first }
+            $runs | dedup-latest-runs
         }
         return $prepared
     }
