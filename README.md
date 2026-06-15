@@ -137,7 +137,7 @@ as if you owned them; the watchlist is ignored when `--user` is given.
 |---|---|
 | `my` | Show available `my` subcommands |
 | `my excuses` | Proposed-migration excuses for packages you uploaded/sponsored/watched |
-| `my srus` | SRUs you signed or created (filtered `sru-list`); includes watched packages |
+| `my srus` | SRUs you signed, created, or watched (filtered `sru-list`) |
 | `my ppas` | PPAs you own on Launchpad (pass `-d` for sources/uploads/builds) |
 | `my watchlist` | List the personal package watchlist |
 | `my watchlist add` | Add source packages to the watchlist |
