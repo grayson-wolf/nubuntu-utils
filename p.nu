@@ -1,7 +1,7 @@
 # PPA workflow subcommands — all PPA lifecycle operations under `p`.
 
 use packaging/meta.nu [pkg-name, pkg-top-release, pkg-version, target-release]
-use packaging/build.nu [cpbd, tarme, gen-ppa-name, test-urls]
+use packaging/build.nu [cpbd, tarme, getdeps, gen-ppa-name, test-urls]
 use packaging/tests/ [autopkgtest-cookie, autopkgtest-cookie-path, submit-autopkgtest, select-and-submit, ppa-test-urls, fetch-ppa-test-runs, fetch-ppa-running, fetch-ppa-waiting, render-tests-tables]
 use completions.nu [ppa-completions]
 use packaging/launchpad.nu [normalize-ppa-name]
@@ -43,9 +43,16 @@ export def --wrapped build [
     --proposed (-p) # Use the proposed pocket
     --security (-s) # Use the security pocket
     --backports (-b) # Use the backports pocket
+    --deps (-D) # Install build dependencies (runs getdeps) before building
     --no-deps (-d) # Skip build dependency checks (passes -d to debuild)
     ...debuild_flags: string # Extra flags to pass to debuild
 ]: nothing -> nothing {
+    if $deps and $no_deps {
+        error make { msg: "--deps (-D) and --no-deps (-d) are mutually exclusive" }
+    }
+
+    if $deps { getdeps }
+
     cpbd
     tarme
 
