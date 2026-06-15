@@ -169,7 +169,7 @@ export def classify-log-url [log_url: string]: nothing -> string {
 export def parse-run-timestamp [stamp: string]: nothing -> datetime {
     # Take "YYYYMMDD_HHMMSS" prefix (15 chars before the trailing _hash)
     let core = ($stamp | str substring 0..14)
-    $core | into datetime --format "%Y%m%d_%H%M%S"
+    $core | into datetime --format "%Y%m%d_%H%M%S" --timezone UTC | date to-timezone local
 }
 
 # Fetch and parse logs for a list of run records (source-agnostic).
