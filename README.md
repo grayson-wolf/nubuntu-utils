@@ -75,6 +75,7 @@ excuses libsdl3 | where package =~ "freerdp"
 |---|---|---|
 | `NUBUNTU_PKGS_DIR` | `~/pkgs` | Directory where packages are cloned |
 | `NUBUNTU_CACHE_DIR` | `~/.cache/nubuntu-utils` | Cache directory (cookie, team mapping, etc.) |
+| `NUBUNTU_STATE_DIR` | `~/.local/state/nubuntu-utils` | Persistent state directory |
 | `QUILT_PATCHES` | `debian/patches` | Quilt patches directory |
 | `EDITOR` | — | Editor used by `qedit` and other interactive commands |
 
@@ -129,13 +130,18 @@ excuses libsdl3 | where package =~ "freerdp"
 
 `my <thing>` filters a global packaging view to a Launchpad user
 (default `$env.LAUNCHPAD_NAME`, overridable per-subcommand with `-u`).
+Packages on your watchlist are included in `my excuses` and `my srus`
+as if you owned them; the watchlist is ignored when `--user` is given.
 
 | Command | Description |
 |---|---|
 | `my` | Show available `my` subcommands |
-| `my excuses` | Proposed-migration excuses for packages you uploaded/sponsored |
-| `my srus` | SRUs you signed or created (filtered `sru-list`) |
+| `my excuses` | Proposed-migration excuses for packages you uploaded/sponsored/watched |
+| `my srus` | SRUs you signed or created (filtered `sru-list`); includes watched packages |
 | `my ppas` | PPAs you own on Launchpad (pass `-d` for sources/uploads/builds) |
+| `my watchlist` | List the personal package watchlist |
+| `my watchlist add` | Add source packages to the watchlist |
+| `my watchlist rm` | Remove source packages from the watchlist |
 
 ### Patches (`q` subcommands)
 

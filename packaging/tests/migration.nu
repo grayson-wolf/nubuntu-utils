@@ -387,6 +387,7 @@ export def format-role [role: string]: nothing -> string {
         "uploaded" => $"(ansi cyan)uploaded(ansi reset)"
         "sponsored" => $"(ansi magenta)sponsored(ansi reset)"
         "sponsored-by" => $"(ansi yellow)sponsored-by(ansi reset)"
+        "watched" => $"(ansi red)watched(ansi reset)"
         _ => $role
     }
 }

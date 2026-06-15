@@ -14,6 +14,7 @@ use packaging/tests/migration.nu [
 ]
 use packaging/sru.nu [fetch-sru-entries, build-sru-rows, print-sru-legend]
 use packaging/launchpad.nu [uploader-data, lp-ppa-entries, lp-ppa-detail]
+use packaging/watchlist.nu [load-watchlist, save-watchlist]
 use completions.nu [release-completions]
 use formatting.nu [osc8-link, with-spinner, bool-glyph, fmt-mib, fmt-relative]
 use ubuntu-versions.nu [DEVEL_RELEASE, LATEST_STABLE_RELEASE]
@@ -34,15 +35,20 @@ export def main []: nothing -> nothing {
     print "  my excuses    Proposed-migration excuses for packages you uploaded/sponsored"
     print "  my srus       SRUs you signed or created (subset of `sru-list`)"
     print "  my ppas       PPAs you own on Launchpad"
+    print "  my watchlist  Manage the personal package watchlist"
     print ""
     print "Each subcommand accepts -u/--user to override $env.LAUNCHPAD_NAME."
+    print "Watchlist packages are always included in `my excuses` and `my srus`"
+    print "unless --user is explicitly passed."
     print "Run `my <subcommand> --help` for full flags."
 }
 
 # Show proposed-migration excuses for every package YOU uploaded, sponsored,
-# or had sponsored. Cross-references the excuses YAML with LP publication
-# history (cached) to identify your packages by `package_signer_link` /
-# `package_creator_link` matching $env.LAUNCHPAD_NAME (or --user).
+# or had sponsored, plus any packages on your watchlist. Cross-references the
+# excuses YAML with LP publication history (cached) to identify your packages
+# by `package_signer_link` / `package_creator_link` matching
+# $env.LAUNCHPAD_NAME (or --user). Watchlist packages are included with role
+# "watched" without an LP lookup; watchlist is ignored when --user is given.
 #
 # Default output: summary table (source, version, role, verdict, issues).
 # --detailed: also render the full per-package excuses output for each match.
@@ -60,12 +66,18 @@ export def "my excuses" [
     let why = ($why or $failing)
     let me = (resolve-user $user)
 
+    # Watchlist only applies when using the default identity.
+    let watchlist = if ($user | is-empty) { load-watchlist } else { [] }
+
     let all_sources = (with-spinner $"Fetching excuses for ($series)..." { fetch-excuses $series })
     let sources = if $limit > 0 { $all_sources | first $limit } else { $all_sources }
     let n = ($sources | length)
 
     let candidates = (with-spinner $"Querying LP uploader data for ($n) sources..." {
         $sources | par-each --threads 16 {|src|
+            if ($src.source in $watchlist) {
+                return ($src | insert role "watched" | insert uploader_data {})
+            }
             let v = ($src | get -o new-version | default "-")
             if $v == "-" { return null }
             let ud = (uploader-data $src.source $v)
@@ -120,15 +132,20 @@ export def "my excuses" [
     $unified
 }
 
-# Pending SRUs for which you are the signer or creator.
-# A user is "responsible" if they appear in `uploaders` (comma-separated list
-# in the report) or match `creator`. Pass `-u` to query for someone else.
+# Pending SRUs for which you are the signer or creator, plus any packages on
+# your watchlist. A user is "responsible" if they appear in `uploaders`
+# (comma-separated list in the report) or match `creator`. Pass `-u` to query
+# for someone else; watchlist is ignored when --user is given.
 export def "my srus" [
     series?: string@release-completions  # Ubuntu series (default: latest stable)
     --all-series (-A)                    # Show across all series
     --user (-u): string = ""             # LP username (default: $env.LAUNCHPAD_NAME)
 ]: nothing -> table {
     let me = (resolve-user $user)
+
+    # Watchlist only applies when using the default identity.
+    let watchlist = if ($user | is-empty) { load-watchlist } else { [] }
+
     let s = ($series | default $LATEST_STABLE_RELEASE)
     let entries = (fetch-sru-entries $s $all_series)
     let mine = ($entries | where {|e|
@@ -139,7 +156,7 @@ export def "my srus" [
             | where { $in | is-not-empty }
         )
         let creator = ($e | get -o creator | default "")
-        ($me in $uploaders) or ($creator == $me)
+        ($me in $uploaders) or ($creator == $me) or ($e.pkg in $watchlist)
     })
     if ($mine | is-empty) {
         let scope = if $all_series { "any series" } else { $s }
@@ -150,6 +167,54 @@ export def "my srus" [
     print -e $"(ansi attr_bold)my srus(ansi reset) — (ansi cyan)($rows | length)(ansi reset) SRUs for (ansi cyan)($me)(ansi reset)"
     print-sru-legend $s
     $rows
+}
+
+# Manage the personal package watchlist.
+# Packages on the watchlist are included in `my excuses` and `my srus`
+# regardless of uploader (unless --user is passed to those commands).
+#
+# Bare `my watchlist` lists the current watchlist.
+export def "my watchlist" []: nothing -> list<string> {
+    let wl = load-watchlist
+    if ($wl | is-empty) {
+        print -e "(ansi yellow)Watchlist is empty. Use `my watchlist add <pkg>` to add packages.(ansi reset)"
+    }
+    $wl
+}
+
+# Add one or more source packages to the watchlist.
+export def "my watchlist add" [
+    ...packages: string  # Source package name(s) to add
+]: nothing -> nothing {
+    if ($packages | is-empty) {
+        error make { msg: "Provide at least one package name." }
+    }
+    let wl = load-watchlist
+    let added = ($packages | where { $in not-in $wl })
+    if ($added | is-empty) {
+        print -e $"(ansi yellow)All packages already on watchlist.(ansi reset)"
+        return
+    }
+    save-watchlist ($wl | append $added)
+    print -e $"(ansi green)Added:(ansi reset) ($added | str join ', ')"
+}
+
+# Remove one or more source packages from the watchlist.
+export def "my watchlist rm" [
+    ...packages: string  # Source package name(s) to remove
+]: nothing -> nothing {
+    if ($packages | is-empty) {
+        error make { msg: "Provide at least one package name." }
+    }
+    let wl = load-watchlist
+    let remaining = ($wl | where { $in not-in $packages })
+    let removed = ($wl | where { $in in $packages })
+    if ($removed | is-empty) {
+        print -e $"(ansi yellow)None of those packages were on the watchlist.(ansi reset)"
+        return
+    }
+    save-watchlist $remaining
+    print -e $"(ansi red)Removed:(ansi reset) ($removed | str join ', ')"
 }
 
 # Walk the Launchpad pagination chain for a person's `ppas` collection.

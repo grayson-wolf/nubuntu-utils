@@ -12,5 +12,9 @@ $env.NUBUNTU_PKGS_DIR = ($env.NUBUNTU_PKGS_DIR? | default "~/pkgs")
 $env.NUBUNTU_CACHE_DIR = ($env.NUBUNTU_CACHE_DIR? | default ("~/.cache/nubuntu-utils" | path expand))
 if not ($env.NUBUNTU_CACHE_DIR | path exists) { mkdir $env.NUBUNTU_CACHE_DIR }
 
+# Optional: State directory for persistent nubuntu-utils data (default: ~/.local/state/nubuntu-utils)
+$env.NUBUNTU_STATE_DIR = ($env.NUBUNTU_STATE_DIR? | default ("~/.local/state/nubuntu-utils" | path expand))
+if not ($env.NUBUNTU_STATE_DIR | path exists) { mkdir $env.NUBUNTU_STATE_DIR }
+
 # Optional: Quilt patches directory (default: debian/patches)
 $env.QUILT_PATCHES = ($env.QUILT_PATCHES? | default "debian/patches")
