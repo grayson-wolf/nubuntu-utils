@@ -1,25 +1,25 @@
-# Miscellaneous test commands: running tests locally and displaying request URLs.
+# Local LXD container/VM build + test commands.
+# Both build a fresh LXD image for a series and run autopkgtest against it:
+# `buildin` builds the source and runs autopkgtest in build-only mode;
+# `testin` runs the package's own autopkgtests (picking a VM when isolation is
+# required).
 
-use ../build.nu [test-urls]
+use ../build.nu [cpbd, tarme]
 use ../../completions.nu [release-completions]
-use ../../formatting.nu [osc8-link]
 use ../../ubuntu-versions.nu [DEVEL_RELEASE]
 
-# Extract autopkgtest request URLs from `ppa tests --show-url` output.
-export def ppa-test-urls [
-    ppa_name: string
-    --proposed (-p)
-]: nothing -> list<string> {
-    let raw = (ppa tests $ppa_name --show-url | lines)
-    let urls = ($raw
-        | where { $in =~ "request.cgi" }
-        | each {|line| $line | str trim | split row " " | where { $in starts-with "https://" } | first }
-    )
-    if $proposed {
-        $urls
-    } else {
-        $urls | where { $in !~ "all-proposed" }
-    }
+# Build binary packages in a clean LXD container for a given distro.
+# Ensures the LXD image exists, builds the source, then runs autopkgtest
+# in build-only mode. Results land in the parent directory alongside the source.
+export def buildin [
+    distro: string@release-completions # The distro to build in (e.g., noble, resolute, stonking)
+]: nothing -> nothing {
+    sudo -v
+    gum spin --show-error --title $"Building LXD image for ($distro)..." -- sudo autopkgtest-build-lxd $"ubuntu-daily:($distro)"
+    cpbd
+    tarme
+    gum spin --show-error --title $"Building source for ($distro)..." -- debuild -S -sa -d
+    gum spin --show-error --title $"Running autopkgtest for ($distro)..." -- sudo autopkgtest ../*.dsc --copy $"(pwd)/.." -- lxd $"autopkgtest/ubuntu/($distro)/amd64"
 }
 
 # Run autopkgtests in a specific distro's lxd image.
@@ -46,20 +46,4 @@ export def testin [
     } else { [] }
     gum spin --show-error --title $"Building LXD ($backend) image for ($distro)..." -- sudo autopkgtest-build-lxd ...$vm_flag $"ubuntu-daily:($distro)"
     sudo autopkgtest . --shell-fail -- lxd $"autopkgtest/ubuntu/($distro)/amd64($image_suffix)" ...$launch_args
-}
-
-# Display autopkgtest request URLs for the current package's PPA upload across all architectures.
-# Shows clickable hyperlinks for both base and proposed variants.
-export def testurl []: nothing -> nothing {
-    let urls = test-urls --proposed
-
-    # Group by arch and display with hyperlinks
-    let arches = ($urls | get arch | uniq)
-    for arch in $arches {
-        let base = ($urls | where { $in.arch == $arch and not $in.proposed } | first | get url)
-        let proposed = ($urls | where { $in.arch == $arch and $in.proposed } | first | get url)
-        let b_link = (osc8-link $base "[B]")
-        let p_link = (osc8-link $proposed "[P]")
-        print $"($arch): ($b_link) ($p_link)\n($base)\n"
-    }
 }

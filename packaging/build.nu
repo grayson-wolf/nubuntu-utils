@@ -2,7 +2,7 @@
 
 use meta.nu [target-release, pkg-upstream-version, pkg-version, pkg-name]
 use launchpad.nu [normalize-ppa-name]
-use ../completions.nu [release-completions]
+use ../formatting.nu [osc8-link]
 use ../ubuntu-versions.nu [ARCHES]
 
 # Clear Parent Build Directory
@@ -100,16 +100,36 @@ export def test-urls [
     $urls
 }
 
-# Build binary packages in a clean LXD container for a given distro.
-# Ensures the LXD image exists, builds the source, then runs autopkgtest
-# in build-only mode. Results land in the parent directory alongside the source.
-export def buildin [
-    distro: string@release-completions # The distro to build in (e.g., noble, resolute, stonking)
-]: nothing -> nothing {
-    sudo -v
-    gum spin --show-error --title $"Building LXD image for ($distro)..." -- sudo autopkgtest-build-lxd $"ubuntu-daily:($distro)"
-    cpbd
-    tarme
-    gum spin --show-error --title $"Building source for ($distro)..." -- debuild -S -sa -d
-    gum spin --show-error --title $"Running autopkgtest for ($distro)..." -- sudo autopkgtest ../*.dsc --copy $"(pwd)/.." -- lxd $"autopkgtest/ubuntu/($distro)/amd64"
+# Extract autopkgtest request URLs from `ppa tests --show-url` output.
+export def ppa-test-urls [
+    ppa_name: string
+    --proposed (-p)
+]: nothing -> list<string> {
+    let raw = (ppa tests $ppa_name --show-url | lines)
+    let urls = ($raw
+        | where { $in =~ "request.cgi" }
+        | each {|line| $line | str trim | split row " " | where { $in starts-with "https://" } | first }
+    )
+    if $proposed {
+        $urls
+    } else {
+        $urls | where { $in !~ "all-proposed" }
+    }
 }
+
+# Display autopkgtest request URLs for the current package's PPA upload across all architectures.
+# Shows clickable hyperlinks for both base and proposed variants.
+export def testurl []: nothing -> nothing {
+    let urls = test-urls --proposed
+
+    # Group by arch and display with hyperlinks
+    let arches = ($urls | get arch | uniq)
+    for arch in $arches {
+        let base = ($urls | where { $in.arch == $arch and not $in.proposed } | first | get url)
+        let proposed = ($urls | where { $in.arch == $arch and $in.proposed } | first | get url)
+        let b_link = (osc8-link $base "[B]")
+        let p_link = (osc8-link $proposed "[P]")
+        print $"($arch): ($b_link) ($p_link)\n($base)\n"
+    }
+}
+

@@ -177,7 +177,7 @@ export def "my srus" [
 export def "my watchlist" []: nothing -> list<string> {
     let wl = load-watchlist
     if ($wl | is-empty) {
-        print -e "(ansi yellow)Watchlist is empty. Use `my watchlist add <pkg>` to add packages.(ansi reset)"
+        print -e $"(ansi yellow)Watchlist is empty. Use `my watchlist add <pkg>` to add packages.(ansi reset)"
     }
     $wl
 }

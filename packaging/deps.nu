@@ -190,6 +190,17 @@ export def dep-components [
     }
 }
 
+# Parse `apt-cache rdepends` stdout into a clean package-name list.
+# Drops the 2-line header, strips the relation prefix (Depends:/PreDepends:),
+# and removes blank lines. Caller dedups (single vs unioned).
+def parse-rdepends [stdout: string]: nothing -> list<string> {
+    $stdout
+    | lines
+    | skip 2
+    | each {|line| $line | str trim | str replace -r '^[A-Za-z]+:\s*' '' }
+    | where { $in != "" }
+}
+
 # Fetch reverse dependencies for a (binary or source) package.
 # Uses apt-cache rdepends directly for binary packages; falls back to
 # resolving source packages through their produced binaries and unioning.
@@ -198,11 +209,7 @@ export def revdeps [
 ]: nothing -> list<string> {
     let raw = (with-spinner $"Fetching reverse dependencies for ($package)..." { apt-cache rdepends $package | complete })
     if $raw.exit_code == 0 {
-        let output = ($raw.stdout | lines)
-        if ($output | length) < 2 { return [] }
-        return ($output | skip 2 | each {|line|
-            $line | str trim | str replace -r '^[A-Za-z]+:\s*' ''
-        } | where { $in != "" } | uniq)
+        return (parse-rdepends $raw.stdout | uniq)
     }
 
     # Not a binary package — try resolving as a source package.
@@ -216,9 +223,7 @@ export def revdeps [
         $bins | par-each {|b|
             let r = (apt-cache rdepends $b | complete)
             if $r.exit_code != 0 { return [] }
-            $r.stdout | lines | skip 2 | each {|line|
-                $line | str trim | str replace -r '^[A-Za-z]+:\s*' ''
-            } | where { $in != "" }
+            parse-rdepends $r.stdout
         } | flatten | uniq
     }
 }

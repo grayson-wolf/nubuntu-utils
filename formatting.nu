@@ -1,4 +1,6 @@
-# Shared formatting utilities (OSC8 hyperlinks, LP bug links)
+# Shared formatting utilities: OSC8 hyperlinks, LP bug links, spinners
+# (with-spinner), version-delta coloring, gum color-spec → ANSI mapping, and
+# generic value formatters (bool glyphs, MiB sizes, relative times, durations).
 
 # Wrap display text in an OSC8 clickable hyperlink.
 # Returns display unchanged if url is empty.

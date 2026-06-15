@@ -2,13 +2,12 @@
 # Ubuntu archive (no PPA).
 
 use ../../completions.nu [pkg-completions]
-use ../../ubuntu-versions.nu [DEVEL_RELEASE, SUPPORTED_RELEASES]
+use ../../ubuntu-versions.nu [DEVEL_RELEASE, SUPPORTED_RELEASES, ARCHES]
 use ../../formatting.nu [with-spinner]
 use ../meta.nu [pkg-name]
 use fetch.nu [fetch-archive-test-runs]
 use render.nu [render-tests-tables, render-tests-matrix]
 
-const DEFAULT_ARCHES = [amd64 arm64 armhf i386 ppc64el riscv64 s390x]
 const DEFAULT_SERIES = [$DEVEL_RELEASE]
 
 # Show autopkgtest results for a package in the Ubuntu archive (no PPA).
@@ -22,7 +21,7 @@ const DEFAULT_SERIES = [$DEVEL_RELEASE]
 export def archive-tests [
     package?: string@pkg-completions          # Source package (defaults to cwd package)
     --series (-s): list<string> = $DEFAULT_SERIES   # Ubuntu series to query
-    --arches (-a): list<string> = $DEFAULT_ARCHES   # Architectures to query
+    --arches (-a): list<string> = $ARCHES   # Architectures to query
     --matrix (-m)                             # Force matrix view (auto when >1 series)
     --all-series                              # Shortcut: matrix across all supported series
     --history (-H)                            # Show all recent runs per arch (chronological)

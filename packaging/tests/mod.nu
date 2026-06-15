@@ -8,4 +8,4 @@ export use log-parsing.nu *
 export use fetch.nu *
 export use render.nu *
 export use archive.nu *
-export use commands.nu *
+export use local.nu *

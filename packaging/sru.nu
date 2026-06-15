@@ -64,7 +64,7 @@ export def fetch-sru-entries [series: string, all_series: bool]: nothing -> any 
 }
 
 # Build the SRU display rows from raw entries.
-# Shared by `sru-list` and `my sru` so coloring / column layout stays in one
+# Shared by `sru-list` and `my srus` so coloring / column layout stays in one
 # place.
 export def build-sru-rows [entries: any, all_series: bool]: nothing -> table {
     $entries | each {|entry|

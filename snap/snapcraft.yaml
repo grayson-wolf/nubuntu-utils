@@ -147,6 +147,9 @@ apps:
   withgit:
     command: bin/launch withgit
 
+  dr:
+    command: bin/launch dr
+
   nubuntu-shell:
     command: bin/nu --include-path $SNAP --config $SNAP/wrappers/shell-config.nu
 
