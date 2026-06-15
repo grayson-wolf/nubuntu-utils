@@ -157,7 +157,7 @@ export def fetch-ppa-waiting [
                 let submit_time = if ($submit_str | is-empty) {
                     (date now)
                 } else {
-                    try { $submit_str | into datetime } catch { (date now) }
+                    try { $submit_str | into datetime --timezone UTC | date to-timezone local } catch { (date now) }
                 }
                 make-pending-row $pkg $a.arch $triggers $submit_time "WAITING"
             } | where { $in != null }
