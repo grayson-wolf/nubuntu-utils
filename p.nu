@@ -95,11 +95,9 @@ export def up [
         $"The upload to PPA ($ppa_path) is done building. No autopkgtest cookie found — tests not auto-submitted."
     }
 
-    (
-      zenity --warning --title "PPA Build Complete"
-      --text $notify_text
-      --icon "dialog-info"
-    )
+    try {
+        notify-send --icon "dialog-information" "PPA Build Complete" $notify_text
+    }
     tests $ppa_path
 }
 
