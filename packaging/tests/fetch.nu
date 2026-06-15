@@ -4,6 +4,15 @@
 
 use log-parsing.nu [AUTOPKGTEST_URL, fetch-and-parse-logs, package-prefix]
 
+const EXCUSES_URL = "https://ubuntu-archive-team.ubuntu.com/proposed-migration"
+
+# Download and parse the full excuses YAML for a series.
+# Returns the `sources` table from the parsed YAML.
+export def fetch-excuses [series: string]: nothing -> table {
+    let url = $"($EXCUSES_URL)/($series)/update_excuses.yaml.xz"
+    curl -s $url | xz -d | from yaml | get sources
+}
+
 # Fetch and parse all available test runs for a (series, owner, ppa).
 # Returns table<source, arch, kind, time, log_url, overall, subtests>
 # Keeps up to `max_per_arch` most recent runs per (source, arch) before downloading logs.

@@ -78,6 +78,9 @@ apps:
   retry-regressions:
     command: bin/launch retry-regressions
 
+  migration-reference:
+    command: bin/launch migration-reference
+
   poc:
     command: bin/launch poc
 

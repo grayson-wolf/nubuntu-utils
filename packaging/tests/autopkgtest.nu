@@ -5,7 +5,7 @@ use ../meta.nu [pkg-name]
 use ../../completions.nu [pkg-completions]
 use ../../ubuntu-versions.nu [DEVEL_RELEASE]
 use ../cache.nu [cache-file-flat]
-use migration.nu [fetch-excuses]
+use fetch.nu [fetch-excuses]
 
 # Return the expanded autopkgtest cookie path (does not check existence).
 export def autopkgtest-cookie-path []: nothing -> string {

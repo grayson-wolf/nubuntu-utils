@@ -2,19 +2,13 @@
 
 use ../meta.nu [pkg-name]
 use ../launchpad.nu [uploader-data]
-use ../../completions.nu [pkg-completions]
+use ../navigation.nu [poc]
+use ../../completions.nu [pkg-completions, release-completions]
 use ../../formatting.nu [osc8-link, lp-bug-link, days-to-duration, with-spinner, version-delta]
-use ../../ubuntu-versions.nu [DEVEL_RELEASE]
+use ../../ubuntu-versions.nu [DEVEL_RELEASE, ARCHES]
 use log-parsing.nu [classify-log-url, format-subtest]
-
-const EXCUSES_URL = "https://ubuntu-archive-team.ubuntu.com/proposed-migration"
-
-# Download and parse the full excuses YAML for a series.
-# Returns the `sources` table from the parsed YAML.
-export def fetch-excuses [series: string]: nothing -> table {
-    let url = $"($EXCUSES_URL)/($series)/update_excuses.yaml.xz"
-    curl -s $url | xz -d | from yaml | get sources
-}
+use fetch.nu [fetch-excuses]
+use autopkgtest.nu [autopkgtest-cookie, select-and-submit]
 
 # Format an autopkgtest status with color and OSC8 hyperlink.
 # If `refined` is non-empty and the britney status is a failure-bearing one
@@ -483,4 +477,29 @@ export def excuses-clusters [
     }
 
     $results
+}
+
+# Submit migration-reference/0 autopkgtests for a source package.
+# Requires an autopkgtest.ubuntu.com session cookie — see `retry-regressions --help`.
+export def migration-reference [
+    package?: string@pkg-completions              # Source package (defaults to cwd package)
+    --series (-s): string@release-completions = $DEVEL_RELEASE  # Ubuntu series
+]: nothing -> nothing {
+    let cookie = autopkgtest-cookie
+    let pkg = if ($package | is-empty) { pkg-name } else { $package }
+
+    # Check ownership and warn if teams are responsible for this package
+    let teams = poc $pkg
+    if not ($teams | is-empty) {
+        let teams_display = ($teams | each {|t| $"~($t)" } | str join ", ")
+        gum confirm $"($pkg) is owned by ($teams_display). Consult them before re-running migration-reference tests. Continue?"
+    }
+
+    # Build one URL per arch and submit via interactive selection
+    let urls = ($ARCHES | each {|arch|
+        let params = { release: $series, package: $pkg, arch: $arch, trigger: "migration-reference/0" }
+        $"https://autopkgtest.ubuntu.com/request.cgi?($params | url build-query)"
+    })
+
+    select-and-submit $urls $cookie --header $"Select migration-reference tests for ($pkg) / ($series):"
 }

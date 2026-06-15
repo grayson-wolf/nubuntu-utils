@@ -122,6 +122,7 @@ excuses libsdl3 | where package =~ "freerdp"
 | `excuses-clusters` | Show the largest co-migration transition clusters blocking proposed |
 | `archive-tests` | Show autopkgtest results for an archive package (single-series table or cross-series matrix) |
 | `retry-regressions` | Retry autopkgtest regressions blocking (or blocked by) a package |
+| `migration-reference` | Submit `migration-reference/0` autopkgtests for a package |
 | `sru-list` | Show pending SRUs for a series with colored/clickable bug status |
 | `testin` | Run autopkgtests in a local LXD container |
 | `testurl` | Display clickable autopkgtest request URLs for the current package |
