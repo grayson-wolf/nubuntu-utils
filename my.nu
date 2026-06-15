@@ -4,8 +4,8 @@
 # slice that belongs to a Launchpad user (default $env.LAUNCHPAD_NAME,
 # overridable with `-u`).
 
+use packaging/tests/fetch.nu [fetch-excuses]
 use packaging/tests/migration.nu [
-    fetch-excuses,
     classify-role,
     format-role,
     format-verdict-compact,
