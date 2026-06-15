@@ -5,7 +5,7 @@ use packaging/build.nu [cpbd, tarme, gen-ppa-name, test-urls]
 use packaging/tests/ [autopkgtest-cookie, autopkgtest-cookie-path, submit-autopkgtest, select-and-submit, ppa-test-urls, fetch-ppa-test-runs, fetch-ppa-running, fetch-ppa-waiting, render-tests-tables]
 use completions.nu [ppa-completions]
 use packaging/launchpad.nu [normalize-ppa-name]
-use ubuntu-versions.nu [DEVEL_RELEASE]
+use ubuntu-versions.nu [DEVEL_RELEASE, SUPPORTED_RELEASES]
 use formatting.nu [with-spinner]
 use my.nu ["my ppas"]
 
@@ -154,7 +154,11 @@ export def test [
 
 # Display autopkgtest result summaries and retrigger URLs for a named PPA.
 # If no PPA name is given, derives it from the current package directory (like `p name`).
-# Columns: arch, kind (base/proposed), time, then one column per subtest.
+# For a named PPA all supported series are queried in parallel (a PPA may
+# target any series, and could host more than one); a `series` column is added
+# when results span multiple series. For a locally-derived PPA only the cwd
+# target series is queried. Pass --series to restrict to a single series.
+# Columns: [series], arch, kind (base/proposed), time, then one column per subtest.
 # Default returns the display table (pipeline-filterable on arch / kind / time).
 # Use --raw for structured records (with `subtests` list column).
 # Use --history to show all recent runs (not just the latest per arch).
@@ -163,7 +167,7 @@ export def test [
 # extra running.json/queues.json fetches.
 export def tests [
     ppa_name?: string@ppa-completions   # PPA name (auto-detected if omitted)
-    --series (-s): string = ""              # Ubuntu series (default: cwd target if PPA auto-derived, else devel)
+    --series (-s): string = ""              # Ubuntu series (default: cwd target if local, else all supported)
     --arches (-a): list<string> = []        # Architectures (default: all available)
     --history (-H)                          # Show all recent runs (not just the latest per arch)
     --limit (-l): int = 10                  # Max runs per arch in history mode
@@ -182,27 +186,37 @@ export def tests [
     let owner = ($split | get 0)
     let ppa = ($split | get 1)
 
-    let series_resolved = if ($series | is-empty) {
-        if ($ppa_name | is-empty) { (target-release) } else { $DEVEL_RELEASE }
-    } else { $series }
+    let series_list = if ($series | is-not-empty) {
+        [$series]
+    } else if ($ppa_name | is-empty) {
+        [(target-release)]
+    } else {
+        $SUPPORTED_RELEASES
+    }
 
     let max_per_arch = if $history { $limit } else { 4 }
+    # Each run is tagged with its series so render-tests-tables can add a
+    # `series` column when results span more than one. Series with no results
+    # return early from the listing fetch, so the extra queries are cheap.
     # Running/queued runs are appended with kind="running"/"queued" so the
-    # render-tests-tables (source, arch, kind) dedup keeps them as separate
-    # rows rather than overwriting prior finished runs.
-    let runs = with-spinner $"Fetching tests for ($owner)/($ppa) in ($series_resolved)..." {
-        let finished = (fetch-ppa-test-runs $series_resolved $owner $ppa $max_per_arch $arches)
-        let pending = if $no_pending {
-            []
-        } else {
-            let running = (fetch-ppa-running $series_resolved $owner $ppa $arches | each {|r| $r | update kind "running" })
-            let waiting = (fetch-ppa-waiting $series_resolved $owner $ppa $arches | each {|r| $r | update kind "queued" })
-            $running ++ $waiting
-        }
-        $finished ++ $pending
+    # render-tests-tables (series, source, arch, kind) dedup keeps them as
+    # separate rows rather than overwriting prior finished runs.
+    let runs = with-spinner $"Fetching tests for ($owner)/($ppa)..." {
+        $series_list | par-each {|s|
+            let finished = (fetch-ppa-test-runs $s $owner $ppa $max_per_arch $arches | each {|r| $r | insert series $s })
+            let pending = if $no_pending {
+                []
+            } else {
+                let running = (fetch-ppa-running $s $owner $ppa $arches | each {|r| $r | update kind "running" | insert series $s })
+                let waiting = (fetch-ppa-waiting $s $owner $ppa $arches | each {|r| $r | update kind "queued" | insert series $s })
+                $running ++ $waiting
+            }
+            $finished ++ $pending
+        } | flatten
     }
     if ($runs | is-empty) {
-        print -e $"(ansi yellow)No test results found for ($owner)/($ppa) in ($series_resolved).(ansi reset)"
+        let series_disp = ($series_list | str join ", ")
+        print -e $"(ansi yellow)No test results found for ($owner)/($ppa) in ($series_disp).(ansi reset)"
         return
     }
 
@@ -212,14 +226,17 @@ export def tests [
         } else {
             $runs
             | sort-by time --reverse
-            | group-by --to-table { |r| $"($r.source)|($r.arch)|($r.kind)" }
+            | group-by --to-table { |r| $"($r.series)|($r.source)|($r.arch)|($r.kind)" }
             | each {|g| $g.items | first }
         }
         return $prepared
     }
 
+    let header_series = if (($series_list | length) == 1) {
+        $" in (ansi yellow)($series_list | first)(ansi reset)"
+    } else { "" }
     $runs | render-tests-tables {|pkg|
-        $"(ansi cyan)($pkg)(ansi reset) in (ansi yellow)($series_resolved)(ansi reset) — ($owner)/($ppa)"
+        $"(ansi cyan)($pkg)(ansi reset)($header_series) — ($owner)/($ppa)"
     } (not $history)
 }
 

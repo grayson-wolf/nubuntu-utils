@@ -7,15 +7,21 @@ use log-parsing.nu [format-subtest]
 # `header_fn` is a closure (string -> string) that builds the header from a
 # source package name. Prints headers to stderr and returns the rendered
 # display table(s) for pipeline use. When multiple sources are present,
-# returns a concatenated table with a leading `source` column.
-# `dedup_latest`: if true, keep only the latest run per (source, arch, kind);
-# if false, keep all runs (history mode).
+# returns a concatenated table with a leading `source` column. When rows carry
+# a `series` field spanning more than one series, a `series` column is added.
+# `dedup_latest`: if true, keep only the latest run per (series, source, arch,
+# kind); if false, keep all runs (history mode).
 export def render-tests-tables [header_fn: closure, dedup_latest: bool = true]: table -> any {
     let runs = $in
+    let multi_series = (
+        ($runs | columns | any { $in == "series" })
+        and (($runs | get series | uniq | length) > 1)
+    )
+
     let prepared = if $dedup_latest {
         $runs
         | sort-by time --reverse
-        | group-by --to-table { |r| $"($r.source)|($r.arch)|($r.kind)" }
+        | group-by --to-table { |r| $"(($r | get -o series | default ''))|($r.source)|($r.arch)|($r.kind)" }
         | each {|g| $g.items | first }
     } else {
         # History mode: time desc (most recent first), then arch asc (stable sort).
@@ -31,9 +37,9 @@ export def render-tests-tables [header_fn: closure, dedup_latest: bool = true]: 
         print -e $"\n(do $header_fn $pkg)"
 
         # Union of subtest names across this source's rows (preserve order of
-        # first appearance, sorted by arch/kind/time for stability)
+        # first appearance, sorted by series/arch/kind/time for stability)
         let ordered = if $dedup_latest {
-            $rows | sort-by arch kind time
+            if $multi_series { $rows | sort-by series arch kind time } else { $rows | sort-by arch kind time }
         } else {
             $rows | sort-by arch | sort-by time --reverse
         }
@@ -55,11 +61,15 @@ export def render-tests-tables [header_fn: closure, dedup_latest: bool = true]: 
                 _ => "base"
             }
             let overall_cell = (format-subtest $r.overall)
-            mut row = if $multi_source {
-                { source: $pkg, arch: $r.arch, kind: $kind_cell, time: $time_str, log: $log_cell, overall: $overall_cell }
-            } else {
-                { arch: $r.arch, kind: $kind_cell, time: $time_str, log: $log_cell, overall: $overall_cell }
-            }
+            mut row = {}
+            if $multi_source { $row = ($row | insert source $pkg) }
+            if $multi_series { $row = ($row | insert series ($r | get -o series | default "")) }
+            $row = ($row
+                | insert arch $r.arch
+                | insert kind $kind_cell
+                | insert time $time_str
+                | insert log $log_cell
+                | insert overall $overall_cell)
             if not $dedup_latest {
                 let trig_str = (
                     ($r | get -o triggers | default [])
