@@ -182,7 +182,7 @@ def print-excuses-detail [data: record, pkg: string]: nothing -> nothing {
             let bug_ids = ($block_bugs | reject -o verdict | columns)
             let bug_display = ($bug_ids | each {|id|
                 lp-bug-link ($id | into int) --color (ansi red)
-            } | str join ", ")
+            } | str join " ")
             let reason = match $bb_verdict {
                 "REJECTED_PERMANENTLY" => "permanently blocked"
                 _ => $bb_verdict
