@@ -17,7 +17,7 @@ use packaging/launchpad.nu [uploader-data, lp-ppa-entries, lp-ppa-detail, lp-dis
 use packaging/sponsorships.nu [fetch-sponsorships]
 use packaging/watchlist.nu [load-watchlist, save-watchlist]
 use completions.nu [release-completions]
-use formatting.nu [osc8-link, lp-bug-link, with-spinner, bool-glyph, fmt-mib, fmt-relative]
+use formatting.nu [osc8-link, lp-bug-link, lp-source-link, with-spinner, bool-glyph, fmt-mib, fmt-relative]
 use ubuntu-versions.nu [DEVEL_RELEASE, LATEST_STABLE_RELEASE]
 
 # Resolve the user: explicit `--user` wins, else $env.LAUNCHPAD_NAME.
@@ -100,9 +100,10 @@ export def "my excuses" [
     }
 
     let summary = ($candidates | each {|c|
+        let v = ($c | get -o new-version)
         {
-            source: $c.source
-            "new-version": ($c | get -o new-version)
+            source: (lp-source-link $c.source)
+            "new-version": (lp-source-link $c.source --version $v)
             role: (format-role $c.role)
             verdict: (format-verdict ($c | get migration-policy-verdict) --compact)
             issues: (summarize-issues $c)
@@ -128,7 +129,7 @@ export def "my excuses" [
     let unified = ($candidates | each {|c|
         let at = ($c | get -o policy_info.autopkgtest | default {})
         let rows = (build-autopkgtest-rows $at false $why $global_arches $failing)
-        $rows | each {|r| { "blocked-package": $c.source } | merge $r }
+        $rows | each {|r| { "blocked-package": (lp-source-link $c.source) } | merge $r }
     } | flatten)
 
     $unified
@@ -322,8 +323,8 @@ export def "my sponsorships" [
         let base = {
             date: $r.date
             $party_col: ($r | get $party_col)
-            package: (osc8-link $r.package_url $r.package)
-            version: (osc8-link $r.version_url $r.version)
+            package: (lp-source-link $r.package)
+            version: (lp-source-link $r.package --version $r.version)
             series: $r.series
             bugs: ($r.bugs | each {|b| lp-bug-link $b } | str join " ")
         }

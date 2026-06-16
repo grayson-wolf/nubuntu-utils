@@ -4,6 +4,7 @@
 # `excuses` command (migration.nu) and the `my excuses` lens (my.nu).
 
 use log-parsing.nu [classify-log-url, format-subtest]
+use ../../formatting.nu [osc8-link, lp-source-spec-link]
 
 # Format an autopkgtest status with color and OSC8 hyperlink.
 # If `refined` is non-empty and the britney status is a failure-bearing one
@@ -131,7 +132,7 @@ export def build-autopkgtest-rows [
     } else { $tests }
 
     $tests | each {|row|
-        let base = { package: $row.pkg }
+        let base = { package: (lp-source-spec-link $row.pkg) }
         $all_arches | reduce --fold $base {|arch, acc|
             let info = ($row.archinfo | get -o $arch)
             let status = if ($info | is-not-empty) { $info | get 0 | default "" } else { "" }

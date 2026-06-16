@@ -4,7 +4,7 @@
 
 use ../meta.nu [pkg-name]
 use ../../completions.nu [pkg-completions]
-use ../../formatting.nu [osc8-link, lp-bug-link, days-to-duration, with-spinner, version-delta]
+use ../../formatting.nu [osc8-link, lp-bug-link, lp-source-link, days-to-duration, with-spinner, version-delta]
 use ../../ubuntu-versions.nu [DEVEL_RELEASE]
 use fetch.nu [fetch-excuses]
 use excuses-format.nu [format-verdict, build-autopkgtest-rows]
@@ -117,7 +117,10 @@ def print-excuses-detail [data: record, pkg: string]: nothing -> nothing {
     let age_req_dur = if ($age_req | describe) == "string" { $age_req } else if $age_req == 0 { "none" } else { (days-to-duration $age_req) | into string }
 
     let vd = (version-delta $old_ver $new_ver)
-    print -e $"(ansi attr_bold)($pkg)(ansi reset): ($vd.old) → ($vd.new)"
+    let pkg_link = (lp-source-link $pkg)
+    let old_link = (lp-source-link $pkg --version $old_ver --display $vd.old)
+    let new_link = (lp-source-link $pkg --version $new_ver --display $vd.new)
+    print -e $"(ansi attr_bold)($pkg_link)(ansi reset): ($old_link) → ($new_link)"
     print -e $"Status: ($verdict_display) | Age: ($age_dur) \(required: ($age_req_dur)\)"
 
     # Show dependency info when present

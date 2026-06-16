@@ -1,7 +1,7 @@
 # SRU (Stable Release Update) tracking commands
 
 use ../completions.nu [release-completions]
-use ../formatting.nu [osc8-link, days-to-duration, with-spinner, version-delta]
+use ../formatting.nu [osc8-link, lp-source-link, days-to-duration, with-spinner, version-delta]
 use ../ubuntu-versions.nu [LATEST_STABLE_RELEASE]
 
 const SRU_REPORT_URL = "https://ubuntu-archive-team.ubuntu.com/sru_report.yaml"
@@ -86,12 +86,18 @@ export def build-sru-rows [entries: any, all_series: bool]: nothing -> table {
             { "-release": $r, "-updates": $u, "-proposed": $p }
         }
 
+        # Link each non-empty pocket cell to its specific upload page, keeping
+        # the colored version-delta string as the display text.
+        let link_ver = {|raw: string, disp: string|
+            if ($raw | is-empty) { $disp } else { lp-source-link $entry.pkg --version $raw --display $disp }
+        }
+
         let base = {
-            package: $entry.pkg
+            package: (lp-source-link $entry.pkg)
             age: $age_dur
-            "-release": $cols."-release"
-            "-updates": $cols."-updates"
-            "-proposed": $cols."-proposed"
+            "-release": (do $link_ver $r ($cols | get "-release"))
+            "-updates": (do $link_ver $u ($cols | get "-updates"))
+            "-proposed": (do $link_ver $p ($cols | get "-proposed"))
             signer: ($entry | get -o uploaders | default "")
             creator: ($entry | get -o creator | default "")
             bugs: $bugs_formatted

@@ -26,6 +26,46 @@ export def lp-bug-link [id: int, --color: string]: nothing -> string {
     osc8-link $url $display
 }
 
+# Build the canonical Launchpad page URL for an Ubuntu source package.
+# With a (non-empty) version, points at that specific upload page; otherwise
+# the unversioned source overview. Version strings are used verbatim — LP
+# accepts epochs/tildes literally (e.g. `1:10.3p1-4ubuntu1`).
+export def lp-source-url [package: string, version?: string]: nothing -> string {
+    let base = $"https://launchpad.net/ubuntu/+source/($package)"
+    if ($version | is-empty) { $base } else { $"($base)/($version)" }
+}
+
+# Clickable link to an Ubuntu source package on Launchpad.
+#   --version set : links to that specific upload; default label is the version
+#   --version unset: links to the source overview; default label is the package
+# Use --display to override the visible text (e.g. a colored version-delta
+# string, or a combined "pkg/version" cell).
+export def lp-source-link [
+    package: string
+    --version: string = ""
+    --display: string = ""
+]: nothing -> string {
+    let url = (lp-source-url $package $version)
+    let label = if ($display | is-not-empty) { $display
+        } else if ($version | is-not-empty) { $version
+        } else { $package }
+    osc8-link $url $label
+}
+
+# Link a combined "package/version" identifier (e.g. an autopkgtest trigger
+# like `nbd/1:3.26.1-6.1ubuntu2`) to its specific upload page, keeping the
+# whole spec as the display text. No `/` → links to the unversioned source.
+export def lp-source-spec-link [spec: string]: nothing -> string {
+    let idx = ($spec | str index-of "/")
+    if $idx < 0 {
+        lp-source-link $spec
+    } else {
+        let pkg = ($spec | str substring 0..<$idx)
+        let ver = ($spec | str substring ($idx + 1)..)
+        lp-source-link $pkg --version $ver --display $spec
+    }
+}
+
 # Convert a (possibly fractional) number of days into a Nushell duration,
 # rounded to the nearest minute (so the display stays human-readable:
 # "12hr 36min" rather than "12hr 36min 2sec 999ms 999µs 999ns").
