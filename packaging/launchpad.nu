@@ -80,6 +80,24 @@ export def uploader-data [
     }
 }
 
+# Resolve a Launchpad username to its real `display_name` (e.g. "graysonwolf"
+# -> "Grayson Wolf"). Anonymous GET against the LP person endpoint, disk-cached
+# (display names rarely change). Returns the display name, or the input
+# username unchanged if the lookup fails (offline, private, or unknown user).
+export def lp-display-name [user: string]: nothing -> string {
+    if ($user | is-empty) { return "" }
+    let path = (cache-file "lp-person" $"($user).json")
+    let cached = (cache-load $path 7day)
+    if ($cached | is-not-empty) { return $cached }
+    let raw = (^curl -sfL $"($LP_API)/~($user)" | complete)
+    if $raw.exit_code != 0 { return $user }
+    let parsed = (try { $raw.stdout | from json } catch { null })
+    let name = ($parsed | get -o display_name | default "")
+    if ($name | is-empty) { return $user }
+    cache-save $path $name
+    $name
+}
+
 # Normalize a PPA name to owner/name format.
 # Accepts: bare name, owner/name, or ppa:owner/name.
 export def normalize-ppa-name [ppa_name: string]: nothing -> string {

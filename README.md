@@ -140,6 +140,7 @@ as if you owned them; the watchlist is ignored when `--user` is given.
 | `my excuses` | Proposed-migration excuses for packages you uploaded/sponsored/watched |
 | `my srus` | SRUs you signed, created, or watched (filtered `sru-list`) |
 | `my ppas` | PPAs you own on Launchpad (pass `-d` for sources/uploads/builds) |
+| `my sponsorships` | Sponsored uploads where you're the sponsoree (`-g` for ones you sponsored) |
 | `my watchlist` | List the personal package watchlist |
 | `my watchlist add` | Add source packages to the watchlist |
 | `my watchlist rm` | Remove source packages from the watchlist |

@@ -13,10 +13,11 @@ use packaging/tests/excuses-format.nu [
     build-autopkgtest-rows,
 ]
 use packaging/sru.nu [fetch-sru-entries, build-sru-rows, print-sru-legend]
-use packaging/launchpad.nu [uploader-data, lp-ppa-entries, lp-ppa-detail]
+use packaging/launchpad.nu [uploader-data, lp-ppa-entries, lp-ppa-detail, lp-display-name]
+use packaging/sponsorships.nu [fetch-sponsorships]
 use packaging/watchlist.nu [load-watchlist, save-watchlist]
 use completions.nu [release-completions]
-use formatting.nu [osc8-link, with-spinner, bool-glyph, fmt-mib, fmt-relative]
+use formatting.nu [osc8-link, lp-bug-link, with-spinner, bool-glyph, fmt-mib, fmt-relative]
 use ubuntu-versions.nu [DEVEL_RELEASE, LATEST_STABLE_RELEASE]
 
 # Resolve the user: explicit `--user` wins, else $env.LAUNCHPAD_NAME.
@@ -35,6 +36,7 @@ export def main []: nothing -> nothing {
     print "  my excuses    Proposed-migration excuses for packages you uploaded/sponsored"
     print "  my srus       SRUs you signed or created (subset of `sru-list`)"
     print "  my ppas       PPAs you own on Launchpad"
+    print "  my sponsorships  Sponsored uploads where you are the sponsoree (-g: sponsor)"
     print "  my watchlist  Manage the personal package watchlist"
     print ""
     print "Each subcommand accepts -u/--user to override $env.LAUNCHPAD_NAME."
@@ -280,5 +282,51 @@ export def "my ppas" [
             series: (($d | get -o series | default []) | str join ",")
             builds: (builds-summary $d)
         }
+    }
+}
+
+# Sponsored uploads recorded by the UDD Ubuntu Sponsorship Miner.
+# Default: uploads sponsored FOR you (you are the sponsoree).
+# --given (-g): uploads YOU sponsored for others (you are the sponsor).
+#
+# The miner matches on real names, not LP usernames, so the resolved user
+# ($env.LAUNCHPAD_NAME or --user) is mapped to its LP `display_name` before
+# querying.
+#
+# Default columns: date, the other party (sponsor, or sponsoree with -g),
+# package (LP link), version, series, bugs. The `action` column is shown only
+# when at least one row has one. --raw returns the full parsed records.
+export def "my sponsorships" [
+    --user (-u): string = ""  # LP username (default: $env.LAUNCHPAD_NAME)
+    --given (-g)              # Uploads you sponsored for others (default: for you)
+    --raw (-r)                # Return the full parsed records
+]: nothing -> any {
+    let me = (resolve-user $user)
+    let name = (lp-display-name $me)
+    let dir = if $given { "sponsored by" } else { "sponsored for" }
+    let rows = (with-spinner $"Fetching uploads ($dir) ($name)..." {
+        fetch-sponsorships $name --given=$given
+    })
+    if ($rows | is-empty) {
+        print -e $"(ansi yellow)No uploads ($dir) ($name).(ansi reset)"
+        return []
+    }
+    if $raw { return $rows }
+
+    let party_col = if $given { "sponsoree" } else { "sponsor" }
+    let show_action = ($rows | any {|r| ($r.action | str trim) | is-not-empty })
+
+    print -e $"(ansi attr_bold)my sponsorships(ansi reset) — (ansi cyan)($rows | length)(ansi reset) uploads ($dir) (ansi cyan)($name)(ansi reset)"
+
+    $rows | each {|r|
+        let base = {
+            date: $r.date
+            $party_col: ($r | get $party_col)
+            package: (osc8-link $r.package_url $r.package)
+            version: (osc8-link $r.version_url $r.version)
+            series: $r.series
+            bugs: ($r.bugs | each {|b| lp-bug-link $b } | str join " ")
+        }
+        if $show_action { $base | insert action $r.action } else { $base }
     }
 }
