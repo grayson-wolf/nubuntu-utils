@@ -252,7 +252,7 @@ export def sync [
     git checkout -b $"test-sync-($release)"
 
     # Bump version with ~ppa1 suffix and retarget to Ubuntu release
-    dch --local ~ppa --distribution $release "no change changelog update for PPA build"
+    dch --local '~ppa' --distribution $release "no change changelog update for PPA build"
     update-maintainer
 
     git add -A
