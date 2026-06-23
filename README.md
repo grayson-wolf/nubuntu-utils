@@ -185,7 +185,7 @@ as if you owned them; the watchlist is ignored when `--user` is given.
 | Command | Description |
 |---|---|
 | `spawn` | Launch an LXD container/VM and enter a shell |
-| `ephemeral` | Spawn a temporary container that self-destructs on exit |
+| `ephemeral` | Spawn a temporary container/VM that self-destructs on exit |
 | `lxc-reap` | Stop and delete a single container |
 | `lxc-reap-all` | Reap all orphaned ephemeral containers |
 | `images` | List images from a given LXD remote as a table; optionally filter by alias (e.g., `images ubuntu-daily: resolute`) |

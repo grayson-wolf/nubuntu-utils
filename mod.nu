@@ -9,7 +9,7 @@
 #
 # Helper-only modules (completions, ubuntu-versions) are intentionally absent.
 export use git.nu [withgit, lppush, dr, "dr auto", "dr continue", "dr abort"]
-export use lxd.nu *
+export use lxd.nu [spawn, ephemeral, lxc-reap, lxc-reap-all, images]
 export use packaging/ *
 export use p.nu
 export use q.nu

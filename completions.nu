@@ -8,6 +8,13 @@ export def release-completions []: nothing -> list<string> {
     $SUPPORTED_RELEASES
 }
 
+# Common LXD VM memory / disk sizes, for --memory / --disk on the
+# lxd-spawning commands (spawn, ephemeral, testin). The values are
+# suggestions only — any size lxc accepts is valid.
+export def lxd-size-completions []: nothing -> list<string> {
+    ["2GiB" "4GiB" "8GiB" "16GiB" "32GiB" "40GiB" "80GiB"]
+}
+
 # Your PPAs on Launchpad (cached 5min). Backed by `my ppas` / `p list`.
 export def ppa-completions []: nothing -> list<string> {
     do --ignore-errors { lp-ppa-names } | default []
