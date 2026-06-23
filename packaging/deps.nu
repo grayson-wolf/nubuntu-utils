@@ -1,6 +1,6 @@
 # Dependency pocket/component analysis commands
 
-use ../formatting.nu [with-spinner]
+use ../formatting.nu [with-spinner, lp-source-link]
 
 # Get the archive component for a real binary package via apt-cache policy.
 # Returns "" if no candidate component is found (likely a virtual package).
@@ -134,6 +134,36 @@ def resolve-build-deps [pkg: string]: nothing -> list<string> {
     | uniq
 }
 
+# Resolve a binary package name to its source package name via `apt-cache show`.
+# Ubuntu binary names don't always match their source (e.g. `libc6` → `glibc`),
+# so linking `+source/<binary>` directly would 404. Falls back to the input
+# name when there's no explicit `Source:` field (source name == binary name) or
+# the package can't be resolved (virtual / unknown), so the result is always
+# safe to hand to `lp-source-link`.
+def bin-to-source [pkg: string]: nothing -> string {
+    let output = (apt-cache show $pkg | complete)
+    if $output.exit_code != 0 { return $pkg }
+    let src_line = (
+        $output.stdout
+        | lines
+        | where { $in | str starts-with "Source:" }
+        | get -o 0
+        | default ""
+    )
+    if ($src_line | is-empty) { return $pkg }
+    # `Source:` may carry a version, e.g. "Source: glibc (2.39-0ubuntu8.4)".
+    $src_line
+    | str replace -r '^Source:\s*' ''
+    | str replace -r '\s*\(.*\)\s*$' ''
+    | str trim
+}
+
+# Link a binary package name to its Launchpad source page, keeping the binary
+# name as the visible label. Resolves binary → source first so the URL is valid.
+def bin-source-link [pkg: string]: nothing -> string {
+    lp-source-link (bin-to-source $pkg) --display $pkg
+}
+
 # Check which archive components (pockets) a package's dependencies live in.
 # Lists main/restricted counts, and explicitly names packages in universe/multiverse.
 # Virtual packages are resolved via their providers (shown as `name → provider`).
@@ -180,9 +210,11 @@ export def dep-components [
                 | sort-by name
                 | each {|e|
                     if ($e.via | is-not-empty) {
-                        print $"    - ($e.name) → ($e.via)"
+                        # Virtual package: `name` has no source page of its own,
+                        # so link the concrete provider to its source instead.
+                        print $"    - ($e.name) → (bin-source-link $e.via)"
                     } else {
-                        print $"    - ($e.name)"
+                        print $"    - (bin-source-link $e.name)"
                     }
                 }
             }

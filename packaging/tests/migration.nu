@@ -127,10 +127,12 @@ def print-excuses-detail [data: record, pkg: string]: nothing -> nothing {
     let blocked_by = ($data | get -o dependencies.blocked-by | default [])
     let migrate_after = ($data | get -o dependencies.migrate-after | default [])
     if not ($blocked_by | is-empty) {
-        print -e $"Blocked by: (ansi red)($blocked_by | str join ', ')(ansi reset)"
+        let links = ($blocked_by | each {|p| lp-source-link $p --display $"(ansi red)($p)(ansi reset)" } | str join " ")
+        print -e $"Blocked by: ($links)"
     }
     if not ($migrate_after | is-empty) {
-        print -e $"Migrate after: (ansi yellow)($migrate_after | str join ', ')(ansi reset)"
+        let links = ($migrate_after | each {|p| lp-source-link $p --display $"(ansi yellow)($p)(ansi reset)" } | str join " ")
+        print -e $"Migrate after: ($links)"
     }
 
     # Show component mismatches (compacted by architecture)

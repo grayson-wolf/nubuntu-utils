@@ -1,6 +1,6 @@
 # Rendering helpers for autopkgtest run tables.
 
-use ../../formatting.nu [osc8-link]
+use ../../formatting.nu [osc8-link, lp-source-spec-link]
 use log-parsing.nu [format-subtest]
 
 # Keep only the most recent run per (series, source, arch, kind). Input rows
@@ -81,9 +81,15 @@ export def render-tests-tables [header_fn: closure, dedup_latest: bool = true]: 
                 let trig_str = (
                     ($r | get -o triggers | default [])
                     | each {|t|
-                        if $t == "migration-reference/0" {
+                        if ($t | split row "/" | first) == "migration-reference" {
+                            # Synthetic baseline trigger — no Launchpad source
+                            # page exists, so style it but never link (the URL
+                            # would 404).
                             $"(ansi attr_bold)(ansi purple)($t)(ansi reset)"
-                        } else { $t }
+                        } else {
+                            # Real `source/version` trigger → clickable upload page.
+                            lp-source-spec-link $t
+                        }
                     }
                     | str join " "
                 )
