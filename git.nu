@@ -1,7 +1,5 @@
 # GitHub / git helper commands
 
-use packaging/meta.nu [pkg-version]
-
 # Fetch the GitHub token, reusing $env.GITHUB_TOKEN if already set.
 def github-token []: nothing -> string {
     $env.GITHUB_TOKEN? | default (gh auth token | str trim)
@@ -44,19 +42,26 @@ export def --wrapped lppush [
     }
 
     if $merge_tags {
-        let version = pkg-version
-        let tags = [
-            $"reconstruct/($version)"
-            $"split/($version)"
-            $"logical/($version)"
+        # Discover merge tags by glob rather than reconstructing names from the
+        # changelog version. git-ubuntu stamps reconstruct/split/logical with
+        # the version of the *old/ubuntu* delta being merged (and DEP-14-mangles
+        # it: ':'->'%', '~'->'_', ...), which is NOT the current changelog
+        # version that `pkg-version` returns.
+        let tag_patterns = [
+            "reconstruct/*"
+            "split/*"
+            "logical/*"
             "old/ubuntu"
             "old/debian"
             "new/debian"
         ]
+        let tags = (
+            git tag -l ...$tag_patterns
+                | lines
+                | where { not ($in | str trim | is-empty) }
+        )
         for tag in $tags {
-            if not (git tag -l $tag | is-empty) {
-                git push $remote $tag
-            }
+            git push $remote $tag
         }
     }
 }
