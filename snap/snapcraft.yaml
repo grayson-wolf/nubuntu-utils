@@ -10,7 +10,6 @@ description: |
   in Nushell for full pipeline/table support.
 
 base: core26
-build-base: devel
 grade: devel
 confinement: classic
 license: MIT
@@ -157,5 +156,6 @@ apps:
     command: bin/aliases
 
 environment:
+  PATH: $PATH:$SNAP/usr/bin
   NUBUNTU_PKGS_DIR: $HOME/pkgs
   NUBUNTU_CACHE_DIR: $HOME/.cache/nubuntu-utils
