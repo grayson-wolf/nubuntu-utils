@@ -25,12 +25,14 @@ export def buildin [
 
 # Run autopkgtests in a specific distro's lxd image.
 # Defaults to the current development release.
+# --proposed/-p enables the proposed pocket in the testbed (like `p test -p`).
 # Automatically uses a VM if any test requires isolation-machine; --vm forces
 # the VM backend even when no test demands it.
 # VMs get a fixed resource allocation (unlike containers, which share the
 # host), so --memory/--cpus/--disk tune the VM to avoid OOM during the build.
 export def testin [
     distro: string@release-completions = $DEVEL_RELEASE # The distro to test in
+    --proposed (-p)                                      # Enable the proposed pocket in the testbed (apt-pocket=proposed)
     --vm                                                 # Force the VM backend (auto-enabled for isolation-machine tests)
     --memory (-m): string@lxd-size-completions = "8GiB"  # VM memory limit (VM backend only)
     --cpus (-c): int = 4                                 # VM CPU count (VM backend only)
@@ -48,6 +50,7 @@ export def testin [
     let image_suffix = if $needs_vm { "/vm" } else { "" }
     let backend = if $needs_vm { "VM" } else { "container" }
     let launch_args = if $needs_vm { (vm-limit-args $memory $cpus $disk) } else { [] }
+    let proposed_args = if $proposed { ["--apt-pocket=proposed"] } else { [] }
     gum spin --show-error --title $"Building LXD ($backend) image for ($distro)..." -- sudo autopkgtest-build-lxd ...$vm_flag $"ubuntu-daily:($distro)"
-    sudo autopkgtest . --shell-fail -- lxd $"autopkgtest/ubuntu/($distro)/amd64($image_suffix)" ...$launch_args
+    sudo autopkgtest . --shell-fail ...$proposed_args -- lxd $"autopkgtest/ubuntu/($distro)/amd64($image_suffix)" ...$launch_args
 }
