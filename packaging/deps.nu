@@ -240,7 +240,12 @@ export def revdeps [
     package: string # The package to check reverse dependencies for
 ]: nothing -> list<string> {
     let raw = (with-spinner $"Fetching reverse dependencies for ($package)..." { apt-cache rdepends $package | complete })
-    if $raw.exit_code == 0 {
+
+    # `apt-cache rdepends` exits 0 even for a source/virtual name that has no
+    # binary of its own, emitting just `<name>` with no `Reverse Depends:`
+    # header, so also gate  on the header so those names fall through to
+    # source-package resolution instead of returning empty.
+    if ($raw.exit_code == 0) and ($raw.stdout | str contains "Reverse Depends:") {
         return (parse-rdepends $raw.stdout | uniq)
     }
 
