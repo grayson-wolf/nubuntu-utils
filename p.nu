@@ -83,7 +83,7 @@ export def up [
     # Auto-submit autopkgtest requests via cookie
     let cookie = autopkgtest-cookie-path
     let notify_text = if ($cookie | path exists) {
-        let urls = (test-urls)
+        let urls = if $proposed { test-urls --proposed | where $in =~ "all-proposed" } else { test-urls }
         let results = ($urls | par-each {|entry|
             submit-autopkgtest $entry.url $cookie
         })
