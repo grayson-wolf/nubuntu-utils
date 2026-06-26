@@ -110,6 +110,9 @@ apps:
   sru-list:
     command: bin/launch sru-list
 
+  merges:
+    command: bin/launch merges
+
   buildin:
     command: bin/launch buildin
 

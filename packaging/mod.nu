@@ -10,4 +10,5 @@ export use changelog.nu [dch-bump]
 export use navigation.nu [pkg, poc]
 export use deps.nu [dep-components, revdeps]
 export use sru.nu [sru-list]
+export use merges.nu
 export use tests/ *
