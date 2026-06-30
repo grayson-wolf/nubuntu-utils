@@ -71,6 +71,13 @@ export def "my excuses" [
     # Watchlist only applies when using the default identity.
     let watchlist = if ($user | is-empty) { load-watchlist } else { [] }
 
+    # Syncs have creator as the Debian uploader and no signer, so they aren't caught
+    # fall back to the sponsorship miner
+    let sponsored_pairs = (with-spinner $"Fetching sponsorships for ($me)..." {
+        let rows = (fetch-sponsorships (lp-display-name $me))
+        if ($rows | is-empty) { [] } else { $rows | select package version }
+    })
+
     let all_sources = (with-spinner $"Fetching excuses for ($series)..." { fetch-excuses $series })
     let sources = if $limit > 0 { $all_sources | first $limit } else { $all_sources }
     let n = ($sources | length)
@@ -83,10 +90,22 @@ export def "my excuses" [
             let v = ($src | get -o new-version | default "-")
             if $v == "-" { return null }
             let ud = (uploader-data $src.source $v)
-            if ($ud | is-empty) { return null }
-            let role = (classify-role $ud.signer $ud.creator $me)
+            # Publication-based classification first (signer/creator).
+            let pub_role = if ($ud | is-empty) { null } else {
+                classify-role $ud.signer $ud.creator $me
+            }
+            # Fall back to the sponsorship miner — catches sponsored syncs the
+            # publication record can't attribute to the user.
+            let is_sponsored = ($sponsored_pairs | any {|s| $s.package == $src.source and $s.version == $v })
+            let role = if ($pub_role | is-not-empty) {
+                $pub_role
+            } else if $is_sponsored {
+                "sponsored-by"
+            } else {
+                null
+            }
             if ($role | is-empty) { return null }
-            $src | insert role $role | insert uploader_data $ud
+            $src | insert role $role | insert uploader_data ($ud | default {})
         } | where { $in != null }
     })
 
