@@ -3,14 +3,21 @@
 # so they can be unioned and rendered uniformly.
 
 use log-parsing.nu [AUTOPKGTEST_URL, fetch-and-parse-logs, package-prefix]
+use ../http.nu [http-get]
 
 const EXCUSES_URL = "https://ubuntu-archive-team.ubuntu.com/proposed-migration"
 
 # Download and parse the full excuses YAML for a series.
-# Returns the `sources` table from the parsed YAML.
+# Returns the `sources` table from the parsed YAML. The payload is xz-compressed
+# (application/x-xz, not an HTTP Content-Encoding), so it's fetched raw and
+# piped through an explicit `xz -d`.
 export def fetch-excuses [series: string]: nothing -> table {
     let url = $"($EXCUSES_URL)/($series)/update_excuses.yaml.xz"
-    curl -s $url | xz -d | from yaml | get sources
+    let compressed = (http-get --raw $url)
+    if ($compressed | is-empty) {
+        error make { msg: $"No excuses data for series '($series)' \(($url) not found)" }
+    }
+    $compressed | ^xz -d | from yaml | get sources
 }
 
 # Fetch and parse all available test runs for a (series, owner, ppa).
@@ -25,8 +32,8 @@ export def fetch-ppa-test-runs [
 ]: nothing -> table {
     let base = $"($AUTOPKGTEST_URL)/results/autopkgtest-($series)-($owner)-($ppa)/"
 
-    # 1. Fetch the listing
-    let listing_text = (do --ignore-errors { http get $"($base)?format=plain" } | default "")
+    # 1. Fetch the listing (plain-text index of the results container)
+    let listing_text = (http-get $"($base)?format=plain")
     if ($listing_text | is-empty) { return [] }
 
     # 2. Parse listing into {arch, source, stamp, log_url}, filter by arch if requested
@@ -96,7 +103,7 @@ export def fetch-ppa-running [
     arches: list<string> = []  # empty = all
 ]: nothing -> table {
     let ppa_id = $"($owner)/($ppa)"
-    let data = (do --ignore-errors { http get $"($AUTOPKGTEST_URL)/static/running.json" } | default {})
+    let data = (http-get $"($AUTOPKGTEST_URL)/static/running.json" | default {})
     if ($data | is-empty) { return [] }
     let now = (date now)
     $data
@@ -129,7 +136,7 @@ export def fetch-ppa-waiting [
     arches: list<string> = []
 ]: nothing -> table {
     let ppa_id = $"($owner)/($ppa)"
-    let data = (do --ignore-errors { http get $"($AUTOPKGTEST_URL)/queues.json" } | default {})
+    let data = (http-get $"($AUTOPKGTEST_URL)/queues.json" | default {})
     if ($data | is-empty) { return [] }
     # Shape: {queue: {codename: {arch: [ {package, triggers, submit-time, ppas?}, ... ]}}}
     # PPA jobs live under the "ppa" queue; "ubuntu" entries lack the ppas field.
@@ -182,7 +189,7 @@ export def fetch-archive-test-runs [
     let entries = (
         $arches | par-each {|arch|
             let page_url = $"($AUTOPKGTEST_URL)/packages/($prefix)/($package)/($series)/($arch)"
-            let html = (do --ignore-errors { http get $page_url } | default "")
+            let html = (http-get $page_url | default "")
             if ($html | is-empty) { [] } else {
                 # Extract run IDs (YYYYMMDD_HHMMSS_<hash>), keep unique in
                 # appearance order. Page lists most-recent first.
@@ -225,7 +232,7 @@ def fetch-run-requester [
 ]: nothing -> string {
     if ($run_id | is-empty) { return "" }
     let url = $"($AUTOPKGTEST_URL)/packages/($package)/($series)/($arch)/($run_id)@"
-    let html = (do --ignore-errors { http get $url } | default "")
+    let html = (http-get $url | default "")
     if ($html | is-empty) { return "" }
     let m = ($html | parse -r '(?s)Requester</th>\s*<td>(?P<r>.*?)</td>')
     if ($m | is-empty) { return "" }

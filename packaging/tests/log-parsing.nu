@@ -1,10 +1,11 @@
 # Autopkgtest log parsing + status vocabulary.
-# Pure parsing utilities — no network policy of its own (callers do the
-# actual fetch and pass strings in). Two narrow helpers (classify-log-url,
-# fetch-and-parse-logs) do shell out via curl/gzip because the conversion
-# from a log URL to a parsed log is too useful to split across modules.
+# Parsing utilities plus two log-fetch helpers. Fetches go through the shared
+# `http-get` (../http.nu): it attaches the autopkgtest anti-crawler cookie and
+# raises on non-404 HTTP errors instead of silently yielding an empty log.
 
 export const AUTOPKGTEST_URL = "https://autopkgtest.ubuntu.com"
+
+use ../http.nu [http-get]
 
 # Build an autopkgtest request.cgi submission URL from a params record.
 # Values are query-encoded via `url build-query` (so pass raw, unencoded
@@ -159,17 +160,39 @@ export def to-log-url [url: string]: nothing -> string {
     $"($AUTOPKGTEST_URL)/results/autopkgtest-($r.series)/($r.series)/($r.arch)/($prefix)/($r.pkg)/($r.run)@/log.gz"
 }
 
+# Fetch an autopkgtest `.gz` log and return its decoded text, or "" if absent.
+# The results container serves logs with HTTP `Content-Encoding: gzip`, which
+# nu's `http get` transparently strips — so a fetch yields the plain log text
+# and no explicit decompression is needed. As a safety net, if a container ever
+# serves a bare gzip body (binary, no transport encoding) the body comes back
+# as `binary` and we fall back to an explicit `gzip -d`. A missing log (404)
+# surfaces as null from `http-get` and maps to "".
+#
+# This is the per-log CONTENT fetch, run in batch over many logs (see
+# `fetch-and-parse-logs`), so unlike the discovery-layer fetchers it must be
+# tolerant: one flaky/absent log becomes "" (the row renders BAD) rather than
+# aborting the whole table. The anti-crawler cookie still comes from `http-get`,
+# so the systematic 429 is fixed; only genuinely individual failures are eaten.
+def fetch-log-text [url: string]: nothing -> string {
+    let body = (try { http-get --raw $url } catch { "" })
+    if ($body | is-empty) { return "" }
+    if (($body | describe) == "binary") {
+        let decoded = ($body | ^gzip -d | complete)
+        if $decoded.exit_code != 0 { "" } else { $decoded.stdout }
+    } else {
+        $body | into string
+    }
+}
+
 # Fetch a gzipped autopkgtest log and return its overall classification string.
 # Accepts both raw log URLs and run-page URLs.
-# Returns "" if the URL is empty / unrecognised / the fetch fails.
+# Returns "" if the URL is empty / unrecognised / the log is absent.
 export def classify-log-url [log_url: string]: nothing -> string {
     let resolved = (to-log-url $log_url)
     if ($resolved | is-empty) { return "" }
-    let result = (^curl -sf $resolved | complete)
-    if $result.exit_code != 0 { return "" }
-    let decoded = ($result.stdout | ^gzip -d | complete)
-    if $decoded.exit_code != 0 { return "" }
-    (parse-autopkgtest-log $decoded.stdout).overall
+    let log = (fetch-log-text $resolved)
+    if ($log | is-empty) { return "" }
+    (parse-autopkgtest-log $log).overall
 }
 
 # Parse a listing-line timestamp like "20260608_160510_abc123" → datetime.
@@ -184,11 +207,7 @@ export def parse-run-timestamp [stamp: string]: nothing -> datetime {
 # Output rows: {source, arch, kind, time, log_url, overall, subtests, triggers}
 export def fetch-and-parse-logs []: table -> table {
     $in | par-each {|r|
-        let fetched = (^curl -fs $r.log_url | complete)
-        let log = if $fetched.exit_code != 0 { "" } else {
-            let decoded = ($fetched.stdout | ^gzip -d | complete)
-            if $decoded.exit_code != 0 { "" } else { $decoded.stdout }
-        }
+        let log = (fetch-log-text $r.log_url)
         let parsed = (parse-autopkgtest-log $log)
         {
             source:   $r.source
