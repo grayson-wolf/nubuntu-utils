@@ -8,7 +8,8 @@ use ../http.nu [http-get]
 const EXCUSES_URL = "https://ubuntu-archive-team.ubuntu.com/proposed-migration"
 
 # Download and parse the full excuses YAML for a series.
-# Returns the `sources` table from the parsed YAML. The payload is xz-compressed
+# Returns parsed YAML (contains `generated-date` (as nushell date) and `sources`).
+# The payload is xz-compressed
 # (application/x-xz, not an HTTP Content-Encoding), so it's fetched raw and
 # piped through an explicit `xz -d`.
 export def fetch-excuses [series: string]: nothing -> table {
@@ -17,7 +18,9 @@ export def fetch-excuses [series: string]: nothing -> table {
     if ($compressed | is-empty) {
         error make { msg: $"No excuses data for series '($series)' \(($url) not found)" }
     }
-    $compressed | ^xz -d | from yaml | get sources
+    mut $out = $compressed | ^xz -d | from yaml
+    $out.generated-date = $out.generated-date | split row "." | get 0 | into datetime --format "%Y-%m-%d %H:%M:%S" --timezone UTC | date to-timezone local
+    $out
 }
 
 # Fetch and parse all available test runs for a (series, owner, ppa).

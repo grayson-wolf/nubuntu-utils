@@ -4,7 +4,7 @@
 
 use ../meta.nu [pkg-name]
 use ../../completions.nu [pkg-completions]
-use ../../formatting.nu [osc8-link, lp-bug-link, lp-source-link, days-to-duration, with-spinner, version-delta]
+use ../../formatting.nu [osc8-link, lp-bug-link, lp-source-link, days-to-duration, with-spinner, version-delta, fmt-date-relative]
 use ../../ubuntu-versions.nu [DEVEL_RELEASE]
 use fetch.nu [fetch-excuses]
 use excuses-format.nu [format-verdict, build-autopkgtest-rows]
@@ -26,7 +26,10 @@ export def excuses [
 
     let pkg = $package | default (pkg-name)
 
-    let sources = with-spinner $"Fetching excuses for ($series)..." { fetch-excuses $series }
+    let excuses = with-spinner $"Fetching excuses for ($series)..." { fetch-excuses $series }
+
+    let date = $excuses | get generated-date
+    let sources = $excuses | get sources
 
     let matches = ($sources | where source == $pkg)
 
@@ -39,6 +42,8 @@ export def excuses [
     if $raw {
         return $data
     }
+
+    print -e $"Excuses as of (fmt-date-relative $date)"
 
     print-excuses-detail $data $pkg
 
@@ -226,7 +231,7 @@ export def excuses-clusters [
     --series (-s): string = $DEVEL_RELEASE  # Ubuntu series
     --limit (-n): int = 5                   # Maximum number of clusters to show
 ]: nothing -> table<package: string, size: int, waiting_for: list<string>> {
-    let sources = with-spinner $"Fetching excuses for ($series)..." { fetch-excuses $series }
+    let sources = with-spinner $"Fetching excuses for ($series)..." { fetch-excuses $series | get sources }
 
     # Build {package, waiting_for} for every entry that has migrate-after deps
     let with_deps = (

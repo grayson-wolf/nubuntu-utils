@@ -220,3 +220,10 @@ export def version-delta [
     }
     { old: $old_colored, new: $new_colored }
 }
+
+# Format a date as human-readable plus relative duration (e.g "Thu, 2 Jul 2026 16:35:00 (1h ago))
+export def fmt-date-relative [date: datetime] {
+    let fdate = $date | format date "%a, %d %b %Y %H:%M:%S"
+    let rel = ($date | date humanize)
+    $"($fdate) \(($rel)\)"
+}

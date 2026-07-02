@@ -130,7 +130,7 @@ export def retry-regressions [
     let cookie = autopkgtest-cookie
     let pkg = $package | default (pkg-name)
 
-    let sources = fetch-excuses $series
+    let sources = fetch-excuses $series | get sources
 
     let urls = if $rev {
         print -e $"(ansi yellow)⏳ Scanning entries for packages blocked by ($pkg)...(ansi reset)"

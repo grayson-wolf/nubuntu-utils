@@ -17,7 +17,7 @@ use packaging/launchpad.nu [uploader-data, lp-ppa-entries, lp-ppa-detail, lp-dis
 use packaging/sponsorships.nu [fetch-sponsorships]
 use packaging/watchlist.nu [load-watchlist, save-watchlist]
 use completions.nu [release-completions]
-use formatting.nu [osc8-link, lp-bug-link, lp-source-link, with-spinner, bool-glyph, fmt-mib, fmt-relative]
+use formatting.nu [osc8-link, lp-bug-link, lp-source-link, with-spinner, bool-glyph, fmt-mib, fmt-relative, fmt-date-relative]
 use ubuntu-versions.nu [DEVEL_RELEASE, LATEST_STABLE_RELEASE]
 
 # Resolve the user: explicit `--user` wins, else $env.LAUNCHPAD_NAME.
@@ -78,7 +78,10 @@ export def "my excuses" [
         if ($rows | is-empty) { [] } else { $rows | select package version }
     })
 
-    let all_sources = (with-spinner $"Fetching excuses for ($series)..." { fetch-excuses $series })
+    let excuses = with-spinner $"Fetching excuses for ($series)..." { fetch-excuses $series }
+
+    let date = $excuses | get generated-date
+    let all_sources = $excuses | get sources
     let sources = if $limit > 0 { $all_sources | first $limit } else { $all_sources }
     let n = ($sources | length)
 
@@ -129,7 +132,7 @@ export def "my excuses" [
         }
     })
 
-    print -e $"(ansi attr_bold)my excuses(ansi reset) — (ansi cyan)($candidates | length)(ansi reset) packages for (ansi cyan)($me)(ansi reset) in (ansi yellow)($series)(ansi reset)"
+    print -e $"(ansi attr_bold)my excuses(ansi reset) — (ansi cyan)($candidates | length)(ansi reset) packages for (ansi cyan)($me)(ansi reset) in (ansi yellow)($series)(ansi reset) - as of (ansi cyan)(fmt-date-relative $date)(ansi reset)"
 
     if not $detailed {
         return $summary
