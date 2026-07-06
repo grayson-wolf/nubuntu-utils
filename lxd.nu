@@ -105,6 +105,6 @@ export def images [
     if ($alias | is-empty) {
         $imgs
     } else {
-        $imgs | where {|row| $row.aliases | any {|a| ($a.name | str downcase) =~ ($alias | str downcase) } }
+        $imgs | where {|row| $row.aliases | any {|a| ($a.name | str lowercase) =~ ($alias | str lowercase) } }
     }
 }
