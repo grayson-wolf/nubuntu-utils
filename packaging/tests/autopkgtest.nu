@@ -37,8 +37,9 @@ export def label-autopkgtest-url [url: string]: nothing -> record<label: string,
     let release = ($params | where key == "release" | get value | first | default "?")
     let package = ($params | where key == "package" | get value | first | default "?")
     let arch = ($params | where key == "arch" | get value | first | default "?")
-    let proposed = if ($params | where key == "all-proposed" | is-not-empty) { " (all-proposed)" } else { "" }
-    { label: $"($release) ($package) ($arch)($proposed)", url: $url }
+    let proposed = if ($params | where key == "all-proposed" | is-not-empty) { "-proposed" } else { "" }
+    let trigger = ($params | where key == "trigger" | get value | first | default "?")
+    { label: $"($release)($proposed) ($package) ($arch) \(($trigger)\)", url: $url }
 }
 
 # Interactively select autopkgtest URLs via gum choose, then submit them in parallel.
