@@ -5,7 +5,7 @@ use ../../completions.nu [pkg-completions]
 use ../../ubuntu-versions.nu [DEVEL_RELEASE, SUPPORTED_RELEASES, ARCHES]
 use ../../formatting.nu [with-spinner]
 use ../meta.nu [pkg-name]
-use fetch.nu [fetch-archive-test-runs]
+use fetch.nu [fetch-archive-test-runs, fetch-archive-running, fetch-archive-waiting]
 use render.nu [render-tests-tables, render-tests-matrix, dedup-latest-runs]
 
 const DEFAULT_SERIES = [$DEVEL_RELEASE]
@@ -16,6 +16,10 @@ const DEFAULT_SERIES = [$DEVEL_RELEASE]
 # a single arch × series grid of overall statuses (no subtest columns).
 # History mode (--history): show all recent runs per arch chronologically — useful
 # for investigating when a test started failing. Incompatible with matrix mode.
+# Running and queued jobs are shown alongside finished runs in history mode
+# (one row per arch with overall=Running/Queued); use --no-pending to skip the
+# extra running.json/queues.json fetches. Pending lookups are only done in
+# history mode (matrix mode shows the latest finished run per cell).
 # Default output is the display table (pipeline-filterable); use --raw for the
 # structured row data including the `subtests` list column.
 export def archive-tests [
@@ -27,6 +31,7 @@ export def archive-tests [
     --history (-H)                            # Show all recent runs per arch (chronological)
     --limit (-l): int = 10                    # Max runs per arch to fetch in history mode
     --raw (-r)                                # Return structured records with full subtest data
+    --no-pending (-N)                         # Skip running/queued lookups
 ]: nothing -> any {
     let pkg = if ($package | is-empty) { pkg-name } else { $package }
     let series_list = if $all_series { $SUPPORTED_RELEASES } else { $series }
@@ -37,10 +42,19 @@ export def archive-tests [
     let max_per_arch = if $use_matrix { 1 } else if $history { $limit } else { 4 }
 
     # Fetch in parallel across series; tag each run with its series.
+    # Pending (running/queued) jobs are only fetched in history mode, since the
+    # default single-series view already shows the latest finished run and the
+    # matrix view shows the latest per cell.
     let runs = with-spinner $"Fetching archive tests for ($pkg)..." {
         $series_list | par-each {|s|
-            (fetch-archive-test-runs $s $pkg $arches $max_per_arch --with-requester=$history)
-            | each {|r| $r | insert series $s }
+            let finished = (fetch-archive-test-runs $s $pkg $arches $max_per_arch --with-requester=$history)
+                | each {|r| $r | insert series $s }
+            let pending = if ($history and not $no_pending) {
+                let running = (fetch-archive-running $s $pkg $arches | each {|r| $r | update kind "running" | insert series $s })
+                let waiting = (fetch-archive-waiting $s $pkg $arches | each {|r| $r | update kind "queued" | insert series $s })
+                $running ++ $waiting
+            } else { [] }
+            $finished ++ $pending
         } | flatten
     }
     if ($runs | is-empty) {

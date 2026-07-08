@@ -95,18 +95,16 @@ def make-pending-row [
     }
 }
 
-# Fetch currently running autopkgtest jobs for a PPA.
-# Returns rows shaped like fetch-ppa-test-runs output (source, arch, kind,
-# time, log_url, overall=RUNNING, subtests=[]), so render-tests-tables can
-# display them alongside finished runs.
-export def fetch-ppa-running [
+# Shared collector for running.json. Iterates all packages/handles/codenames/
+# arches, applies `keep` (closure receiving {pkg, arch, jobinfo} → bool), and
+# emits make-pending-row output with overall=RUNNING. The arches filter is
+# applied after `keep` so callers can short-circuit on package/ppas first.
+def collect-running-jobs [
+    data: record
     series: string
-    owner: string
-    ppa: string
-    arches: list<string> = []  # empty = all
+    arches: list<string>
+    keep: closure  # {pkg: string, arch: string, jobinfo: record} -> bool
 ]: nothing -> table {
-    let ppa_id = $"($owner)/($ppa)"
-    let data = (http-get $"($AUTOPKGTEST_URL)/static/running.json" | default {})
     if ($data | is-empty) { return [] }
     let now = (date now)
     $data
@@ -117,8 +115,7 @@ export def fetch-ppa-running [
                 if $c.codename != $series { return [] }
                 $c.arches | transpose arch info | each {|a|
                     let jobinfo = ($a.info | get -o 0 | default {})
-                    let ppas = ($jobinfo | get -o ppas | default [])
-                    if $ppa_id not-in $ppas { return null }
+                    if not (do $keep { pkg: $p.pkg, arch: $a.arch, jobinfo: $jobinfo }) { return null }
                     if (not ($arches | is-empty)) and ($a.arch not-in $arches) { return null }
                     # info[1] is elapsed-seconds-since-submission, not a unix epoch.
                     let elapsed = ($a.info | get -o 1 | default 0 | into int)
@@ -130,22 +127,20 @@ export def fetch-ppa-running [
     } | flatten
 }
 
-# Fetch queued (waiting) autopkgtest jobs for a PPA. Same row shape as
-# fetch-ppa-running but with overall=WAITING.
-export def fetch-ppa-waiting [
+# Shared collector for queues.json. `queue` is the top-level key ("ppa" or
+# "ubuntu"). Each entry is a "pkgname\n{json-args}" string; `keep` receives
+# {pkg, arch, entry} (entry = parsed JSON record) → bool. Emits make-pending-row
+# output with overall=WAITING.
+def collect-queued-jobs [
+    data: record
+    queue: string
     series: string
-    owner: string
-    ppa: string
-    arches: list<string> = []
+    arches: list<string>
+    keep: closure  # {pkg: string, arch: string, entry: record} -> bool
 ]: nothing -> table {
-    let ppa_id = $"($owner)/($ppa)"
-    let data = (http-get $"($AUTOPKGTEST_URL)/queues.json" | default {})
-    if ($data | is-empty) { return [] }
-    # Shape: {queue: {codename: {arch: [ {package, triggers, submit-time, ppas?}, ... ]}}}
-    # PPA jobs live under the "ppa" queue; "ubuntu" entries lack the ppas field.
-    let ppa_queue = ($data | get -o ppa | default {})
-    if ($ppa_queue | is-empty) { return [] }
-    $ppa_queue
+    let q = ($data | get -o $queue | default {})
+    if ($q | is-empty) { return [] }
+    $q
     | transpose codename arches
     | each {|c|
         if $c.codename != $series { return [] }
@@ -160,8 +155,7 @@ export def fetch-ppa-waiting [
                 let e = if ($json_str | is-empty) { {} } else {
                     try { $json_str | from json } catch { {} }
                 }
-                let ppas = ($e | get -o ppas | default [])
-                if $ppa_id not-in $ppas { return null }
+                if not (do $keep { pkg: $pkg, arch: $a.arch, entry: $e }) { return null }
                 let triggers = ($e | get -o triggers | default [])
                 let submit_str = ($e | get -o submit-time | default "")
                 let submit_time = if ($submit_str | is-empty) {
@@ -173,6 +167,68 @@ export def fetch-ppa-waiting [
             } | where { $in != null }
         } | flatten
     } | flatten
+}
+
+# Fetch currently running autopkgtest jobs for a PPA.
+# Returns rows shaped like fetch-ppa-test-runs output (source, arch, kind,
+# time, log_url, overall=RUNNING, subtests=[]), so render-tests-tables can
+# display them alongside finished runs.
+export def fetch-ppa-running [
+    series: string
+    owner: string
+    ppa: string
+    arches: list<string> = []  # empty = all
+]: nothing -> table {
+    let ppa_id = $"($owner)/($ppa)"
+    let data = (http-get $"($AUTOPKGTEST_URL)/static/running.json" | default {})
+    collect-running-jobs $data $series $arches { |r|
+        let ppas = ($r.jobinfo | get -o ppas | default [])
+        $ppa_id in $ppas
+    }
+}
+
+# Fetch queued (waiting) autopkgtest jobs for a PPA. Same row shape as
+# fetch-ppa-running but with overall=WAITING.
+export def fetch-ppa-waiting [
+    series: string
+    owner: string
+    ppa: string
+    arches: list<string> = []
+]: nothing -> table {
+    let ppa_id = $"($owner)/($ppa)"
+    let data = (http-get $"($AUTOPKGTEST_URL)/queues.json" | default {})
+    collect-queued-jobs $data "ppa" $series $arches { |r|
+        let ppas = ($r.entry | get -o ppas | default [])
+        $ppa_id in $ppas
+    }
+}
+
+# Fetch currently running autopkgtest jobs for a package in the archive (non-PPA).
+# Same row shape as fetch-ppa-running, but matches the top-level package key and
+# excludes PPA-tagged runs (those carry a non-empty `ppas` list).
+export def fetch-archive-running [
+    series: string
+    package: string
+    arches: list<string> = []  # empty = all
+]: nothing -> table {
+    let data = (http-get $"($AUTOPKGTEST_URL)/static/running.json" | default {})
+    collect-running-jobs $data $series $arches { |r|
+        $r.pkg == $package and (($r.jobinfo | get -o ppas | default []) | is-empty)
+    }
+}
+
+# Fetch queued (waiting) autopkgtest jobs for a package in the archive (non-PPA).
+# Same row shape as fetch-archive-running but with overall=WAITING. Archive jobs
+# live under the "ubuntu" queue in queues.json (PPA jobs are under "ppa").
+export def fetch-archive-waiting [
+    series: string
+    package: string
+    arches: list<string> = []
+]: nothing -> table {
+    let data = (http-get $"($AUTOPKGTEST_URL)/queues.json" | default {})
+    collect-queued-jobs $data "ubuntu" $series $arches { |r|
+        $r.pkg == $package and (($r.entry | get -o ppas | default []) | is-empty)
+    }
 }
 
 # Fetch and parse archive autopkgtest runs for a (series, package) across the
