@@ -1,7 +1,4 @@
 # Autopkgtest log parsing + status vocabulary.
-# Parsing utilities plus two log-fetch helpers. Fetches go through the shared
-# `http-get` (../http.nu): it attaches the autopkgtest anti-crawler cookie and
-# raises on non-404 HTTP errors instead of silently yielding an empty log.
 
 export const AUTOPKGTEST_URL = "https://autopkgtest.ubuntu.com"
 
@@ -161,18 +158,6 @@ export def to-log-url [url: string]: nothing -> string {
 }
 
 # Fetch an autopkgtest `.gz` log and return its decoded text, or "" if absent.
-# The results container serves logs with HTTP `Content-Encoding: gzip`, which
-# nu's `http get` transparently strips — so a fetch yields the plain log text
-# and no explicit decompression is needed. As a safety net, if a container ever
-# serves a bare gzip body (binary, no transport encoding) the body comes back
-# as `binary` and we fall back to an explicit `gzip -d`. A missing log (404)
-# surfaces as null from `http-get` and maps to "".
-#
-# This is the per-log CONTENT fetch, run in batch over many logs (see
-# `fetch-and-parse-logs`), so unlike the discovery-layer fetchers it must be
-# tolerant: one flaky/absent log becomes "" (the row renders BAD) rather than
-# aborting the whole table. The anti-crawler cookie still comes from `http-get`,
-# so the systematic 429 is fixed; only genuinely individual failures are eaten.
 def fetch-log-text [url: string]: nothing -> string {
     let body = (try { http-get --raw $url } catch { "" })
     if ($body | is-empty) { return "" }
