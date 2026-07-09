@@ -57,7 +57,6 @@ export const SUPPORTED_RELEASES = [
     "focal"     # 20.04 LTS — ESM until 2030
     "jammy"     # 22.04 LTS — standard until 2027
     "noble"     # 24.04 LTS — standard until 2029
-    "questing"  # 25.10     — standard until 2026-07
     "resolute"  # 26.04 LTS — standard until 2031
     "stonking"  # 26.10     — current devel
 ]
