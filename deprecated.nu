@@ -37,10 +37,15 @@ export def --wrapped ppa-build [
     --security (-s)
     --backports (-b)
     --no-deps (-d)
+    --to (-t): string = ""
     ...debuild_flags: string
 ]: nothing -> nothing {
     deprecation-warning "ppa-build" "p build"
-    p build --proposed=$proposed --security=$security --backports=$backports --no-deps=$no_deps ...$debuild_flags
+    if ($to | is-not-empty) {
+        p build --proposed=$proposed --security=$security --backports=$backports --no-deps=$no_deps --to $to ...$debuild_flags
+    } else {
+        p build --proposed=$proposed --security=$security --backports=$backports --no-deps=$no_deps ...$debuild_flags
+    }
 }
 
 # Legacy wrapper for `p up`

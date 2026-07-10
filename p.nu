@@ -8,7 +8,7 @@ use packaging/tests/render.nu [render-tests-tables, dedup-latest-runs]
 use completions.nu [ppa-completions]
 use packaging/launchpad.nu [normalize-ppa-name]
 use ubuntu-versions.nu [DEVEL_RELEASE, SUPPORTED_RELEASES]
-use formatting.nu [with-spinner]
+use formatting.nu [with-spinner, osc8-link]
 use my.nu ["my ppas"]
 
 # PPA workflow commands. Run bare `p` to see available subcommands.
@@ -47,6 +47,7 @@ export def --wrapped build [
     --backports (-b) # Use the backports pocket
     --deps (-D) # Install build dependencies (runs getdeps) before building
     --no-deps (-d) # Skip build dependency checks (passes -d to debuild)
+    --to (-t): string # Upload to this PPA name instead of auto-generating one
     ...debuild_flags: string # Extra flags to pass to debuild
 ]: nothing -> nothing {
     if $deps and $no_deps {
@@ -61,7 +62,8 @@ export def --wrapped build [
     let d_flag = if $no_deps { [-d] } else { [] }
     debuild -S -sa ...$d_flag ...$debuild_flags
 
-    up (gen-ppa-name) --proposed=$proposed --security=$security --backports=$backports
+    let ppa_name = if ($to | is-not-empty) { $to } else { gen-ppa-name }
+    up $ppa_name --proposed=$proposed --security=$security --backports=$backports
 }
 
 # Create a named PPA, dput the .changes, wait for build, auto-submit autopkgtests, notify, and show test status.
@@ -76,7 +78,18 @@ export def up [
         } else if $security { [--pocket security]
         } else if $backports { [--pocket backports]
         } else { [] }
-    ppa create $ppa_name ...$pocket_args
+
+    # ppa create exits 73 when the PPA already exists — non-fatal, just means
+    # we're reusing one (e.g. retrying an upload). Any other non-zero exit is real.
+    let result = (^ppa create $ppa_name ...$pocket_args | complete)
+    if $result.exit_code != 0 and $result.exit_code != 73 {
+        error make { msg: $result.stderr }
+    }
+
+    let parts = ($ppa_path | split row "/")
+    let link = (osc8-link $"https://launchpad.net/~($parts | get 0)/+archive/ubuntu/($parts | get 1)" $ppa_path)
+    print $"Created PPA: ($link)"
+
     dput $"ppa:($ppa_path)" ../*.changes
     ppa wait $ppa_path
 
