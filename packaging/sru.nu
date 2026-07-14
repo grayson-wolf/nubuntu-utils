@@ -49,7 +49,7 @@ export def sru-list [
 # Fetch the SRU report and return the entries for the requested series
 # (or all series, flattened with a `series` field) for further processing.
 export def fetch-sru-entries [series: string, all_series: bool]: nothing -> any {
-    let data = with-spinner "Fetching SRU report..." { http get $SRU_REPORT_URL | from yaml }
+    let data = with-spinner "Fetching SRU report..." { http get $SRU_REPORT_URL }
     if $all_series {
         $data | transpose series items | each {|row|
             $row.items | each {|item| $item | insert series $row.series }
