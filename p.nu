@@ -47,6 +47,7 @@ export def --wrapped build [
     --backports (-b) # Use the backports pocket
     --deps (-D) # Install build dependencies (runs getdeps) before building
     --no-deps (-d) # Skip build dependency checks (passes -d to debuild)
+    --no-fetch (-f) # Don't attempt fetch upstream tarballs
     --to (-t): string # Upload to this PPA name instead of auto-generating one
     ...debuild_flags: string # Extra flags to pass to debuild
 ]: nothing -> nothing {
@@ -57,7 +58,10 @@ export def --wrapped build [
     if $deps { getdeps }
 
     cpbd
-    tarme
+
+    if not $no_fetch {
+        tarme
+    }
 
     let d_flag = if $no_deps { [-d] } else { [] }
     debuild -S -sa ...$d_flag ...$debuild_flags
