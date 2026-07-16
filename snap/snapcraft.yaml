@@ -98,6 +98,9 @@ apps:
   pkg:
     command: bin/launch pkg
 
+  salsa:
+    command: bin/launch salsa
+
   spawn:
     command: bin/launch spawn
 

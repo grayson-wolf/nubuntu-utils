@@ -68,6 +68,7 @@ excuses libsdl3 | where package =~ "freerdp"
 | `DEBFULLNAME` | Your full name for debian/changelog entries | `Your Name` |
 | `DEBEMAIL` | Your email for debian/changelog entries | `you@example.com` |
 | `DEBSIGN_KEYID` | GPG key ID for signing packages | `YOUR_GPG_KEY_ID` |
+| `SALSA_TOKEN` | Salsa (Debian GitLab) personal access token for `salsa` fork creation (scope: `api`) | `salsa-token` |
 
 ## Optional Environment Variables
 
@@ -100,6 +101,7 @@ excuses libsdl3 | where package =~ "freerdp"
 | Command | Description |
 |---|---|
 | `pkg` | Clone a package (or cd into it if already cloned) |
+| `salsa` | Clone a Debian salsa fork (auto-discovers upstream, forks if needed, clones into `<pkg>/salsa/`) |
 | `dch-bump` | Bump changelog version and commit with update-maintainer |
 | `poc` | Check which team(s) own a package |
 | `revdeps` | List reverse dependencies of a package |

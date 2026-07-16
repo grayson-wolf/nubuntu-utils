@@ -1,4 +1,4 @@
-# Central HTTP layer for the toolkit's outbound GETs.
+# Central HTTP layer for the toolkit's outbound requests.
 
 # Hosts that serve an anti-crawler challenge to nu's default User-Agent.
 const CHALLENGE_HOSTS = ["autopkgtest.ubuntu.com"]
@@ -29,5 +29,23 @@ export def http-get [
         404 => null
         429 => (error make { msg: $"HTTP 429 fetching ($url): rate-limited or anti-crawler challenge not satisfied" })
         _ => (error make { msg: $"HTTP ($resp.status) fetching ($url)" })
+    }
+}
+
+# Wrap http post with the same error policy as http-get.
+# Returns the body on 2XX, null on 404, and explicitly errors on everything else.
+# --headers: extra request headers (e.g. {PRIVATE-TOKEN: $token}).
+# --data: the request body (string or binary). Defaults to empty string.
+export def http-post [
+    url: string
+    --data: any = ""          # request body
+    --headers: record = {}    # extra request headers
+]: nothing -> any {
+    let resp = (http post --full --allow-errors --headers $headers $url $data)
+    match $resp.status {
+        200..299 => $resp.body
+        404 => null
+        429 => (error make { msg: $"HTTP 429 posting to ($url): rate-limited" })
+        _ => (error make { msg: $"HTTP ($resp.status) posting to ($url)" })
     }
 }
