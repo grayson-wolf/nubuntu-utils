@@ -116,6 +116,9 @@ apps:
   merges:
     command: bin/launch merges
 
+  unapproved:
+    command: bin/launch unapproved
+
   buildin:
     command: bin/launch buildin
 

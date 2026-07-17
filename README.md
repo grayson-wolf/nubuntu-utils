@@ -127,6 +127,7 @@ excuses libsdl3 | where package =~ "freerdp"
 | `migration-reference` | Submit `migration-reference/0` autopkgtests for a package |
 | `sru-list` | Show pending SRUs for a series with colored/clickable bug status |
 | `merges` | Show outstanding archive merges (merge-o-matic) as a table; omit the component for a combined board. |
+| `unapproved` | Show the unapproved upload queue for a series |
 | `testin` | Run autopkgtests in a local LXD container |
 | `testurl` | Display clickable autopkgtest request URLs for the current package |
 

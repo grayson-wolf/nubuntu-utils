@@ -12,4 +12,5 @@ export use salsa.nu
 export use deps.nu [dep-components, revdeps]
 export use sru.nu [sru-list]
 export use merges.nu
+export use unapproved.nu
 export use tests/ *
