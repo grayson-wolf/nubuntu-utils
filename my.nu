@@ -17,7 +17,7 @@ use packaging/launchpad.nu [uploader-data, lp-ppa-entries, lp-ppa-detail, lp-dis
 use packaging/sponsorships.nu [fetch-sponsorships]
 use packaging/watchlist.nu [load-watchlist, save-watchlist]
 use completions.nu [release-completions]
-use formatting.nu [osc8-link, lp-bug-link, lp-source-link, with-spinner, bool-glyph, fmt-mib, fmt-relative, fmt-date-relative]
+use formatting.nu [osc8-link, lp-bug-link, lp-source-link, with-spinner, bool-glyph, fmt-mib, fmt-date-relative]
 use ubuntu-versions.nu [DEVEL_RELEASE, LATEST_STABLE_RELEASE]
 
 # Resolve the user: explicit `--user` wins, else $env.LAUNCHPAD_NAME.
@@ -301,7 +301,7 @@ export def "my ppas" [
         let d = $pair.1
         $row | merge {
             sources: ($d | get -o sources | default 0)
-            last_upload: (fmt-relative ($d | get -o last_upload | default ""))
+            last_upload: (try { ($d | get -o last_upload | default "") | into datetime } catch { null })
             series: (($d | get -o series | default []) | str join ",")
             builds: (builds-summary $d)
         }
