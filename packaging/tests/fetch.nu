@@ -158,15 +158,26 @@ def collect-queued-jobs [
                 if not (do $keep { pkg: $pkg, arch: $a.arch, entry: $e }) { return null }
                 let triggers = ($e | get -o triggers | default [])
                 let submit_str = ($e | get -o submit-time | default "")
+                # Format datetimes with +0000 and without
                 let submit_time = if ($submit_str | is-empty) {
                     (date now)
                 } else {
-                    try { $submit_str | into datetime --format "%Y-%m-%d %H:%M:%S" --timezone UTC | date to-timezone local } catch { (date now) }
+                    try { $submit_str | into datetime | date to-timezone local } catch { (date now) }
                 }
-                make-pending-row $pkg $a.arch $triggers $submit_time "WAITING"
+                {
+                    pkg:         $pkg
+                    arch:        $a.arch
+                    triggers:    $triggers
+                    submit_time: $submit_time
+                }
             } | where { $in != null }
         } | flatten
     } | flatten
+    # Deduplicate queued tests
+    | sort-by submit_time --reverse
+    | group-by --to-table { |r| $"($r.pkg)|($r.arch)|($r.triggers | str join ';')" }
+    | each {|g| $g.items | first }
+    | each {|r| make-pending-row $r.pkg $r.arch $r.triggers $r.submit_time "WAITING" }
 }
 
 # Fetch currently running autopkgtest jobs for a PPA.
