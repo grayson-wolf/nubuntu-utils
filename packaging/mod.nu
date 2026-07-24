@@ -9,7 +9,7 @@ export use build.nu [cpbd, tarme, getdeps, test-urls, testurl]
 export use changelog.nu [dch-bump]
 export use navigation.nu [pkg, poc]
 export use salsa.nu
-export use deps.nu [dep-components, revdeps]
+export use deps.nu [dep-components, revdeps, madison]
 export use sru.nu [sru-list]
 export use merges.nu
 export use unapproved.nu

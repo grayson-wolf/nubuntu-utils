@@ -89,6 +89,9 @@ apps:
   dep-components:
     command: bin/launch dep-components
 
+  madison:
+    command: bin/launch madison
+
   p:
     command: bin/launch p
 

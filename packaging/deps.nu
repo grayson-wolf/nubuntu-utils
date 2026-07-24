@@ -1,6 +1,7 @@
 # Dependency pocket/component analysis commands
 
-use ../formatting.nu [with-spinner, lp-source-link]
+use ../formatting.nu [with-spinner, lp-source-link, lp-source-url, osc8-link]
+use ../completions.nu [pkg-completions]
 
 # Get the archive component for a real binary package via apt-cache policy.
 # Returns "" if no candidate component is found (likely a virtual package).
@@ -262,5 +263,77 @@ export def revdeps [
             if $r.exit_code != 0 { return [] }
             parse-rdepends $r.stdout
         } | flatten | uniq
+    }
+}
+
+# Query where a package is published across the archive, as a table.
+# Thin wrapper over `rmadison` that parses its pipe-delimited output into
+# structured rows.
+export def madison [
+    package: string@pkg-completions          # Source/binary package to look up
+    --debian (-d)                            # Query the Debian archive instead of Ubuntu
+    --url (-u): string                       # Explicit madison URL/shorthand (overrides --debian)
+    --suite (-s): string                     # Restrict to a suite (comma/space separated)
+    --arch (-a): string                      # Restrict to an arch (comma/space separated)
+    --raw                                    # Return structured rows (arches as list, no links)
+]: nothing -> table {
+    let host = if ($url | is-not-empty) { $url } else if $debian { "debian" } else { null }
+
+    let args = ([
+        (if ($host | is-not-empty) { ["-u" $host] } else { [] })
+        (if ($suite | is-not-empty) { ["-s" $suite] } else { [] })
+        (if ($arch | is-not-empty) { ["-a" $arch] } else { [] })
+        [$package]
+    ] | flatten)
+
+    let result = (with-spinner $"Querying madison for ($package)..." { ^rmadison ...$args | complete })
+
+    if $result.exit_code != 0 {
+        error make { msg: $"rmadison failed for ($package): ($result.stderr | str trim)" }
+    }
+
+    let rows = ($result.stdout
+    | lines
+    | where { ($in | str trim) | is-not-empty }
+    | each {|line|
+        let cols = ($line | split row "|" | each { str trim })
+        let suite_field = ($cols | get 2? | default "")
+        let suite_parts = ($suite_field | split row "/")
+        {
+            package: ($cols | get 0? | default "")
+            version: ($cols | get 1? | default "")
+            suite: ($suite_parts | get 0? | default "")
+            component: ($suite_parts | get 1? | default "main")
+            arches: ($cols | get 3? | default "" | split row "," | each { str trim } | where { is-not-empty })
+        }
+    })
+
+    if $raw { return $rows }
+
+    # Only Ubuntu/Debian archives have canonical web pages to link to; a custom
+    # --url host may not, so fall back to plain text there.
+    let linkable = ($host == null) or ($host == "debian")
+
+    $rows | each {|row|
+        let ver_cell = if $linkable and ($row.version | is-not-empty) {
+            if $debian {
+                # packages.debian.org has no `-debug` suite pages (the debug
+                # archive is the same source); strip the suffix so the link
+                # resolves instead of erroring with "two or more packages".
+                let suite = ($row.suite | str replace -r '-debug$' '')
+                osc8-link $"https://packages.debian.org/source/($suite)/($row.package)" $row.version
+            } else {
+                osc8-link (lp-source-url $row.package $row.version) $row.version
+            }
+        } else {
+            $row.version
+        }
+        {
+            package: $row.package
+            version: $ver_cell
+            suite: $row.suite
+            component: $row.component
+            arches: ($row.arches | str join " ")
+        }
     }
 }

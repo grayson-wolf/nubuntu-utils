@@ -105,6 +105,7 @@ excuses libsdl3 | where package =~ "freerdp"
 | `dch-bump` | Bump changelog version and commit with update-maintainer |
 | `poc` | Check which team(s) own a package |
 | `revdeps` | List reverse dependencies of a package |
+| `madison` | Query where a package is published across the archive (version/suite/component/arches per series), as a table |
 
 ### Building
 
