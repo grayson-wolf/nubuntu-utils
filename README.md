@@ -115,7 +115,7 @@ excuses libsdl3 | where package =~ "freerdp"
 | `tarme` | Fetch the orig tarball for the current package |
 | `getdeps` | Install build dependencies via mk-build-deps |
 | `test-urls` | Generate autopkgtest request URLs for the current PPA upload |
-| `buildin` | Build binary packages in a clean LXD container |
+| `buildin` | Build source or binary package in a clean LXD container |
 
 ### Testing & Migration
 

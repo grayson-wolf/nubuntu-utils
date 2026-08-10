@@ -1,6 +1,5 @@
 # Local LXD container/VM build + test commands.
-# Both build a fresh LXD image for a series and run autopkgtest against it:
-# `buildin` builds the source and runs autopkgtest in build-only mode;
+# `buildin` builds the source package inside a clean LXD container
 # `testin` runs the package's own autopkgtests (picking a VM when isolation is
 # required).
 
@@ -8,19 +7,155 @@ use ../build.nu [cpbd, tarme]
 use ../../completions.nu [release-completions, lxd-size-completions]
 use ../../lxd.nu [vm-limit-args]
 use ../../ubuntu-versions.nu [DEVEL_RELEASE]
+use ../meta.nu [pkg-name, pkg-version]
+use ../../formatting.nu [with-spinner]
 
-# Build binary packages in a clean LXD container for a given distro.
-# Ensures the LXD image exists, builds the source, then runs autopkgtest
-# in build-only mode. Results land in the parent directory alongside the source.
+# Build a package in a clean LXD container for a given distro.
 export def buildin [
     distro: string@release-completions # The distro to build in (e.g., noble, resolute, stonking)
+    --binary (-b)                      # Also build binary packages
 ]: nothing -> nothing {
-    sudo -v
-    gum spin --show-error --title $"Building LXD image for ($distro)..." -- sudo autopkgtest-build-lxd $"ubuntu-daily:($distro)"
-    cpbd
-    tarme
-    gum spin --show-error --title $"Building source for ($distro)..." -- debuild -S -sa -d
-    gum spin --show-error --title $"Running autopkgtest for ($distro)..." -- sudo autopkgtest ../*.dsc --copy $"(pwd)/.." -- lxd $"autopkgtest/ubuntu/($distro)/amd64"
+    let pkg = (pkg-name)
+    let ver = (pkg-version)
+    let container = $"($pkg)-buildin-($distro)"
+    let parent = (pwd | path dirname)
+
+    # Clean any previous container with the same name
+    let existing = (lxc list --format json | from json | where name == $container)
+    if ($existing | is-not-empty) {
+        print $"Removing stale container ($container)..."
+        lxc stop $container --force | ignore
+        lxc delete $container | ignore
+    }
+
+    # Ensure the LXD image exists
+    let image = $"autopkgtest/ubuntu/($distro)/amd64"
+    let img_exists = (lxc image list --format json | from json | where { $in.aliases | any { $in.name == $image } })
+    if ($img_exists | is-empty) {
+        sudo -v
+        gum spin --show-error --title $"Building LXD image for ($distro)..." -- sudo autopkgtest-build-lxd $"ubuntu-daily:($distro)"
+    }
+
+    # Launch container
+    gum spin --show-error --title $"Launching ($container)..." -- lxc launch $image $container
+
+    # Wait for network
+    with-spinner "Waiting for container network..." {
+        mut ready = false
+        while not $ready {
+            let result = (^lxc exec $container -- ip -4 addr show scope global | complete)
+            $ready = ($result.exit_code == 0) and ($result.stdout | str contains "inet")
+            if not $ready { sleep 1sec }
+        }
+    }
+
+    # Install build tooling
+    gum spin --show-error --title "Installing build tools in container..." -- lxc exec $container -- apt-get install -y -qq build-essential debhelper devscripts equivs
+
+    # Copy source tree into container (tar pipe)
+    with-spinner $"Copying ($pkg) source into container..." {
+        let result = (^tar czf - -C $parent $pkg | ^lxc exec $container -- tar xzf - -C /root/ | complete)
+        if $result.exit_code != 0 {
+            error make { msg: $"Failed to copy source into container: ($result.stderr)" }
+        }
+    }
+
+    # Install build dependencies
+    gum spin --show-error --title "Installing build dependencies..." -- lxc exec $container -- bash -c $"cd /root/($pkg) && apt-get build-dep -y -qq ."
+
+    # Fetch orig tarball
+    gum spin --show-error --title "Fetching orig tarball..." -- lxc exec $container -- bash -c $"cd /root/($pkg) && origtargz"
+
+    # Remove any stale build-deps meta-package artifacts that would break dpkg-source
+    lxc exec $container -- bash -c $"rm -f /root/($pkg)/($pkg)-build-deps_*" | ignore
+
+    # Build package (unsigned — we sign locally after pulling artifacts).
+    let build_cmd = if $binary {
+        $"cd /root/($pkg) && debuild -d -us -uc"
+    } else {
+        $"cd /root/($pkg) && debuild -S -sa -d -us -uc"
+    }
+    gum spin --show-error --title $"Building ($pkg) for ($distro)..." -- lxc exec $container -- bash -c $build_cmd
+
+    # The .changes/.buildinfo suffix differs by mode: source-only emits
+    # <ver>_source.*; a full (binary) build emits <ver>_<arch>.*.
+    let changes = if $binary { $"($pkg)_($ver)_amd64.changes" } else { $"($pkg)_($ver)_source.changes" }
+    let buildinfo = if $binary { $"($pkg)_($ver)_amd64.buildinfo" } else { $"($pkg)_($ver)_source.buildinfo" }
+
+    # Pull artifacts back (all land in /root/ — the parent of /root/$pkg)
+    let upstream_ver = ($ver | str replace -r '^[0-9]+:' '' | str replace -r '-[^-]+$' '')
+    let artifacts = [
+        $"($pkg)_($ver).dsc"
+        $"($pkg)_($ver).debian.tar.xz"
+        $buildinfo
+        $changes
+    ]
+
+    with-spinner "Pulling build artifacts..." {
+        for f in $artifacts {
+            ^lxc file pull $"($container)/root/($f)" $"($parent)/" | complete | ignore
+        }
+
+        # Binary build outputs (--binary): pull the built .deb(s) too.
+        if $binary {
+            let matches = (^lxc exec $container -- bash -c $"ls /root/($pkg)_($ver)_*.deb 2>/dev/null" | complete)
+            if $matches.exit_code == 0 {
+                for f in ($matches.stdout | lines | where { $in | is-not-empty }) {
+                    ^lxc file pull $"($container)/root/($f)" $"($parent)/" | complete | ignore
+                }
+            }
+        }
+
+        # orig tarball: may be .tar.gz or .tar.xz, placed alongside the .dsc in /root/
+        for ext in [gz xz bz2 lzma] {
+            let f = $"/root/($pkg)_($upstream_ver).orig.tar.($ext)"
+            let exists = (^lxc exec $container -- test -f $f | complete).exit_code == 0
+            if $exists {
+                ^lxc file pull $"($container)($f)" $"($parent)/" | complete | ignore
+            }
+        }
+    }
+
+    # Sign locally
+    let key = ($env.DEBSIGN_KEYID? | default "")
+    if ($key | is-empty) {
+        print $"(ansi yellow)DEBSIGN_KEYID not set — skipping signing.(ansi reset)"
+        print $"Artifacts in ($parent):"
+        print $"  ($pkg)_($ver).dsc"
+        print $"  ($changes)"
+        print $"  ($buildinfo)"
+        print $"  ($pkg)_($ver).debian.tar.xz"
+    } else {
+        # Signing must NOT run inside a spinner: debsign prompts on the real
+        # terminal for the GPG pin (a YubiKey tap/PIN here), and a spinner
+        # job writing \r frames to /dev/tty corrupts that prompt. (Same class
+        # as the sudo and autopkgtest --shell-fail no-spinner exceptions.)
+        print $"Signing package with key ($key)..."
+        cd $parent
+        let dsc_result = (^debsign $"-k($key)" $"($pkg)_($ver).dsc" | complete)
+        if $dsc_result.exit_code != 0 {
+            error make { msg: $"debsign failed on .dsc: ($dsc_result.stderr)" }
+        }
+        let changes_result = (^debsign $"-k($key)" $changes | complete)
+        if $changes_result.exit_code != 0 {
+            error make { msg: $"debsign failed on .changes: ($changes_result.stderr)" }
+        }
+        print $"Signed artifacts in ($parent):"
+        print $"  ($pkg)_($ver).dsc"
+        print $"  ($changes)"
+        print $"  ($buildinfo)"
+        print $"  ($pkg)_($ver).debian.tar.xz"
+        if $binary {
+            let debs = (glob $"($parent)/($pkg)_($ver)_*.deb")
+            for deb in $debs { print $"  ($deb | path basename)" }
+        }
+    }
+
+    # Cleanup container
+    with-spinner $"Reaping ($container)..." {
+        ^lxc stop $container --force | complete | ignore
+        ^lxc delete $container | complete | ignore
+    }
 }
 
 # Run autopkgtests in a specific distro's lxd image.
