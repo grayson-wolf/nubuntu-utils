@@ -52,9 +52,10 @@ export def buildin [
     # Install build tooling
     gum spin --show-error --title "Installing build tools in container..." -- lxc exec $container -- apt-get install -y -qq build-essential debhelper devscripts equivs
 
-    # Copy source tree into container (tar pipe)
+    # Copy source tree into container (tar pipe). Exclude VCS internals and
+    # gitignored/untracked artifacts
     with-spinner $"Copying ($pkg) source into container..." {
-        let result = (^tar czf - -C $parent $pkg | ^lxc exec $container -- tar xzf - -C /root/ | complete)
+        let result = (^tar czf - -C $parent --exclude-vcs --exclude-vcs-ignores --exclude='.pc' $pkg | ^lxc exec $container -- tar xzf - -C /root/ | complete)
         if $result.exit_code != 0 {
             error make { msg: $"Failed to copy source into container: ($result.stderr)" }
         }
