@@ -49,6 +49,11 @@ export def buildin [
         }
     }
 
+    # Refresh apt lists first — autopkgtest LXD images are baked at a point
+    # in time and their package lists go stale (old .debs 404 once superseded
+    # in the archive).
+    gum spin --show-error --title "Updating apt lists in container..." -- lxc exec $container -- apt-get update -qq
+
     # Install build tooling
     gum spin --show-error --title "Installing build tools in container..." -- lxc exec $container -- apt-get install -y -qq build-essential debhelper devscripts equivs
 
