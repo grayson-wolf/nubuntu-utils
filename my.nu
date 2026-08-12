@@ -38,6 +38,7 @@ export def main []: nothing -> nothing {
     print "  my ppas       PPAs you own on Launchpad"
     print "  my sponsorships  Sponsored uploads where you are the sponsoree (-g: sponsor)"
     print "  my watchlist  Manage the personal package watchlist"
+    print "  my merges     Show all universe packages in need of merge where you were last uploader"
     print ""
     print "Each subcommand accepts -u/--user to override $env.LAUNCHPAD_NAME."
     print "Watchlist packages are always included in `my excuses` and `my srus`"
@@ -352,4 +353,9 @@ export def "my sponsorships" [
         }
         if $show_action { $base | insert action $r.action } else { $base }
     }
+}
+
+# Show all universe packages in need of merge where you were last uploader
+export def "my merges" []: nothing -> any {
+    merges universe | where uploader =~ $env.DEBFULLNAME
 }
