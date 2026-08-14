@@ -7,7 +7,7 @@ use ../../completions.nu [pkg-completions]
 use ../../formatting.nu [osc8-link, lp-bug-link, lp-source-link, days-to-duration, with-spinner, version-delta, fmt-date-relative]
 use ../../ubuntu-versions.nu [DEVEL_RELEASE]
 use fetch.nu [fetch-excuses]
-use excuses-format.nu [format-verdict, build-autopkgtest-rows]
+use excuses-format.nu [format-verdict, build-autopkgtest-rows, parse-dependency-issues]
 
 # Show proposed-migration (excuses) status for a package.
 # By default, only shows packages with regressions or in-progress tests.
@@ -156,6 +156,31 @@ def print-excuses-detail [data: record, pkg: string]: nothing -> nothing {
                 print -e $"  ($r.pkg)/{($arches)} in ($r.src) → ($r.dep) in ($r.dest)"
             } | ignore
         }
+    }
+
+    # Show dependency problems: unsatisfiable install-deps and arches where the
+    # package is uninstallable (so autopkgtest never ran there).
+    let dep_issues = (parse-dependency-issues ($data | get -o excuses | default []))
+    if ($dep_issues.unsat | is-not-empty) {
+        let grouped = ($dep_issues.unsat | group-by pkg)
+        print -e $"(ansi red)Unsatisfiable dependencies:(ansi reset)"
+        $grouped | transpose pkg rows | each {|g|
+            let arches = ($g.rows | get arch | uniq | str join ", ")
+            print -e $"  ($g.pkg)/{($arches)}"
+        } | ignore
+    }
+    if ($dep_issues.impossible | is-not-empty) {
+        let grouped = ($dep_issues.impossible | group-by {|r| $"($r.src) → ($r.dep)"})
+        print -e $"(ansi red)Impossible depends:(ansi reset)"
+        $grouped | transpose key rows | each {|g|
+            let arches = ($g.rows | get arch | uniq | str join ", ")
+            let r = ($g.rows | first)
+            print -e $"  ($r.src) → ($r.dep)/($r.ver)/{($arches)}"
+        } | ignore
+    }
+    if ($dep_issues.uninstallable | is-not-empty) {
+        let arches = ($dep_issues.uninstallable | uniq | str join ", ")
+        print -e $"(ansi yellow)Uninstallable \(no autopkgtest\):(ansi reset) ($arches)"
     }
 
     # Show missing builds

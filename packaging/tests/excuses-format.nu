@@ -148,6 +148,29 @@ export def build-autopkgtest-rows [
     }
 }
 
+# Parse the free-text `excuses` lines britney emits for dependency problems
+# into compact display groups. Three shapes are recognised:
+#   "<bin>/<arch> has unsatisfiable dependency"
+#   "uninstallable on arch <arch>, not running autopkgtest there"
+#   "Impossible Depends: <src> -> <dep>/<ver>/<arch>"
+# Returns a record { unsat: list<record>, uninstallable: list<arch>,
+# impossible: list<record> } — all empty when no such lines exist.
+export def parse-dependency-issues [lines: list<string>]: nothing -> record {
+    let unsat = ($lines | each {|l|
+        let p = ($l | parse "{pkg}/{arch} has unsatisfiable dependency")
+        if ($p | is-empty) { null } else { $p | first }
+    } | where { $in != null })
+    let uninstallable = ($lines | each {|l|
+        let p = ($l | parse "uninstallable on arch {arch}, not running autopkgtest there")
+        if ($p | is-empty) { null } else { $p | first | get arch }
+    } | where { $in != null })
+    let impossible = ($lines | each {|l|
+        let p = ($l | parse "Impossible Depends: {src} -> {dep}/{ver}/{arch}")
+        if ($p | is-empty) { null } else { $p | first }
+    } | where { $in != null })
+    { unsat: $unsat, uninstallable: $uninstallable, impossible: $impossible }
+}
+
 # Map a migration-policy verdict to a colored display label.
 # Default: verbose form for the `excuses` header ("Migrating",
 # "Blocked (permanent)", ...). `--compact`: short form for the `my excuses`
@@ -207,6 +230,13 @@ export def summarize-issues [entry: record]: nothing -> string {
     let blocked_by = ($entry | get -o dependencies.blocked-by | default [])
     if ($blocked_by | is-not-empty) {
         $parts = ($parts | append $"blocked-by: ($blocked_by | str join ',')")
+    }
+    let dep_issues = (parse-dependency-issues ($entry | get -o excuses | default []))
+    if ($dep_issues.unsat | is-not-empty) {
+        let arches = ($dep_issues.unsat | get arch | uniq | str join ',')
+        $parts = ($parts | append $"unsat-deps: ($arches)")
+    } else if ($dep_issues.uninstallable | is-not-empty) {
+        $parts = ($parts | append $"uninstallable: ($dep_issues.uninstallable | uniq | str join ',')")
     }
     let autopkgtest = ($entry | get -o policy_info.autopkgtest | default {})
     let at_verdict = ($autopkgtest | get -o verdict | default "PASS")
