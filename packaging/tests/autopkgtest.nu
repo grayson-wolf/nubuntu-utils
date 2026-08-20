@@ -74,14 +74,14 @@ export def select-and-submit [
 }
 
 # Extract regression request URLs from a parsed excuses entry.
-def collect-regressions [data: record, series: string, all_proposed: bool]: nothing -> list<string> {
+def collect-regressions [data: record, series: string, all_proposed: bool, against?: string]: nothing -> list<string> {
     let autopkgtest = ($data | get -o policy_info.autopkgtest | default {})
     let source = ($data | get source)
     let new_ver = ($data | get new-version)
     let trigger = $"($source)/($new_ver)"
 
     $autopkgtest | reject -o verdict | transpose pkg archinfo | each {|row|
-        let test_pkg = ($row.pkg | split row "/" | first)
+        let test_pkg = if ($against | is-not-empty) { $against } else { $row.pkg | split row "/" | first }
         $row.archinfo | transpose arch state_info | where { ($in.state_info | get 0) == "REGRESSION" } | each {|entry|
             let params = {
                 release: $series
@@ -127,6 +127,7 @@ export def retry-regressions [
     --all-proposed (-p)     # Run against all of proposed
     --no-select (-n)        # Skip interactive selection, retry all
     --rev (-r)              # Reverse: find packages blocked BY this package (slow)
+    --against: string@pkg-completions  # Run this package's test suite instead of the regressing one (trigger still points at the migrating upload)
 ]: nothing -> nothing {
     let cookie = autopkgtest-cookie
     let pkg = $package | default (pkg-name)
@@ -140,7 +141,7 @@ export def retry-regressions [
             $pkg in $migrate_after
         })
         $candidates | each {|data|
-            collect-regressions $data $series $all_proposed
+            collect-regressions $data $series $all_proposed $against
         } | flatten
     } else {
         # Default --blocks mode: find this package's own entry
@@ -149,7 +150,7 @@ export def retry-regressions [
             print $"No excuses entry found for ($pkg) in ($series)."
             return
         }
-        collect-regressions ($matches | first) $series $all_proposed
+        collect-regressions ($matches | first) $series $all_proposed $against
     }
 
     if ($urls | is-empty) {
@@ -158,7 +159,8 @@ export def retry-regressions [
     }
 
     let mode = if $rev { "caused by" } else { "blocking" }
-    print $"Found ($urls | length) regression\(s\) ($mode) ($pkg)."
+    let via = if ($against | is-not-empty) { $" (running ($against) tests)" } else { "" }
+    print $"Found ($urls | length) regression\(s\) ($mode) ($pkg)($via)."
 
     select-and-submit $urls $cookie --no-select=$no_select --header $"Select regressions to retry for ($pkg):"
 }

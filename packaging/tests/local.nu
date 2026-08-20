@@ -4,11 +4,30 @@
 # required).
 
 use ../build.nu [cpbd, tarme]
-use ../../completions.nu [release-completions, lxd-size-completions]
+use ../../completions.nu [release-completions, lxd-size-completions, local-test-completions]
 use ../../lxd.nu [vm-limit-args]
 use ../../ubuntu-versions.nu [DEVEL_RELEASE]
 use ../meta.nu [pkg-name, pkg-version]
 use ../../formatting.nu [with-spinner]
+
+# Fetch a package's archive debian/tests/control for a series (via
+# pull-lp-source) and report whether any test requires isolation-machine.
+# Returns false when the control can't be fetched/parsed (fail open to the
+# container default; --vm remains the explicit override).
+def archive-control-needs-vm [pkg: string, series: string]: nothing -> bool {
+    let tmp = (mktemp -d)
+    let probe = with-spinner $"Fetching ($pkg) archive test control for ($series)..." {
+        # pull-lp-source extracts the tree; we only need the debian tarball's
+        # debian/tests/control. Run in $tmp to keep the cwd clean.
+        let result = (do { cd $tmp; ^pull-lp-source $pkg $series } | complete)
+        if $result.exit_code != 0 { return false }
+        let control = (glob $"($tmp)/($pkg)-*/debian/tests/control" | first | default "")
+        if ($control | is-empty) { return false }
+        (open $control | str contains "isolation-machine")
+    }
+    rm -rf $tmp
+    $probe
+}
 
 # Build a package in a clean LXD container for a given distro.
 export def buildin [
@@ -166,7 +185,6 @@ export def buildin [
 
 # Run autopkgtests in a specific distro's lxd image.
 # Defaults to the current development release.
-# --proposed/-p enables the proposed pocket in the testbed (like `p test -p`).
 # Automatically uses a VM if any test requires isolation-machine; --vm forces
 # the VM backend even when no test demands it.
 # VMs get a fixed resource allocation (unlike containers, which share the
@@ -174,24 +192,50 @@ export def buildin [
 export def testin [
     distro: string@release-completions = $DEVEL_RELEASE # The distro to test in
     --proposed (-p)                                      # Enable the proposed pocket in the testbed (apt-pocket=proposed)
+    --against: string                                    # Run this package's archive test suite against the local build
+    --test: string@local-test-completions                # Run only the named test (autopkgtest --test-name)
     --vm                                                 # Force the VM backend (auto-enabled for isolation-machine tests)
     --memory (-m): string@lxd-size-completions = "8GiB"  # VM memory limit (VM backend only)
     --cpus (-c): int = 4                                 # VM CPU count (VM backend only)
     --disk (-d): string@lxd-size-completions = "40GiB"   # VM root disk size (VM backend only)
 ]: nothing -> nothing {
     sudo -v
-    let needs_vm = (
-        $vm
-        or (
-            ("debian/tests/control" | path exists)
-            and (open debian/tests/control | str contains "isolation-machine")
-        )
+
+    # --against: the test suite is the *archive* source of another package
+    # The binaries under test come from a binary build's .changes in the parent dir;
+    # if there isn't one yet, build it now
+    let test_args = if ($test | is-not-empty) { [$"--test-name=($test)"] } else { [] }
+    let pkg_args = if ($against | is-not-empty) {
+        let ver = (pkg-version)
+        mut found = (glob $"../*_($ver)_amd64.changes" | first | default "")
+        if ($found | is-empty) {
+            print $"(ansi yellow)No binary build found for ($ver) — building one with buildin --binary first.(ansi reset)"
+            buildin $distro --binary
+            $found = (glob $"../*_($ver)_amd64.changes" | first | default "")
+            if ($found | is-empty) {
+                error make { msg: $"buildin --binary did not produce a ../*_($ver)_amd64.changes" }
+            }
+        }
+        # testbinary (.changes) first, then the testsrc (bare archive source name)
+        [($found | path expand) $against]
+    } else { ["."] }
+
+    # VM detection reads the relevant debian/tests/control: the package's own
+    # by default, or the --against package's archive control (fetched via
+    # pull-lp-source) when --against is set.
+    let local_needs_vm = (
+        ("debian/tests/control" | path exists)
+        and (open debian/tests/control | str contains "isolation-machine")
     )
+    let suite_needs_vm = if ($against | is-not-empty) {
+        archive-control-needs-vm $against $distro
+    } else { $local_needs_vm }
+    let needs_vm = ($vm or $suite_needs_vm)
     let vm_flag = if $needs_vm { ["--vm"] } else { [] }
     let image_suffix = if $needs_vm { "/vm" } else { "" }
     let backend = if $needs_vm { "VM" } else { "container" }
     let launch_args = if $needs_vm { (vm-limit-args $memory $cpus $disk) } else { [] }
     let proposed_args = if $proposed { ["--apt-pocket=proposed"] } else { [] }
     gum spin --show-error --title $"Building LXD ($backend) image for ($distro)..." -- sudo autopkgtest-build-lxd ...$vm_flag $"ubuntu-daily:($distro)"
-    sudo autopkgtest . --shell-fail ...$proposed_args -- lxd $"autopkgtest/ubuntu/($distro)/amd64($image_suffix)" ...$launch_args
+    sudo autopkgtest ...$pkg_args --shell-fail ...$test_args ...$proposed_args -- lxd $"autopkgtest/ubuntu/($distro)/amd64($image_suffix)" ...$launch_args
 }

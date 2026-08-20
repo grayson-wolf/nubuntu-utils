@@ -27,6 +27,29 @@ export def pkg-completions []: nothing -> list<string> {
     ls $pkgs_dir | where type == dir | get name | each { path basename }
 }
 
+# Test names declared in a debian/tests/control file: both `Tests:` /
+# `Test-Command:` stanza names and `Features: test-name=` overrides.
+def control-test-names [control: string]: nothing -> list<string> {
+    if not ($control | path exists) { return [] }
+    let lines = (open $control | lines)
+    # Only `Tests:` carries test names. `Test-Command:` is a shell command, not
+    # a name; such stanzas are named (if at all) via `Features: test-name=...`.
+    let stanza_names = ($lines
+        | parse -r '^Tests:\s*(?P<name>\S.*)$'
+        | each { get name | str trim }
+        | each { split row ',' | each { str trim } }
+        | flatten)
+    let feature_names = ($lines
+        | parse -r '^Features:.*\btest-name=(?P<name>\S+)'
+        | each { get name | str trim })
+    $stanza_names | append $feature_names | uniq | sort
+}
+
+# Test names from the current package's debian/tests/control (for testin --test).
+export def local-test-completions []: nothing -> list<string> {
+    control-test-names "debian/tests/control"
+}
+
 # Subcommands of `my`.
 export def my-subcommand-completions []: nothing -> list<string> {
     ["excuses" "srus" "ppas"]

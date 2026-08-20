@@ -5,7 +5,7 @@ use packaging/build.nu [cpbd, tarme, getdeps, gen-ppa-name, test-urls, ppa-test-
 use packaging/tests/autopkgtest.nu [autopkgtest-cookie, autopkgtest-cookie-path, submit-autopkgtest, select-and-submit]
 use packaging/tests/fetch.nu [fetch-ppa-test-runs, fetch-ppa-running, fetch-ppa-waiting]
 use packaging/tests/render.nu [render-tests-tables, dedup-latest-runs]
-use completions.nu [ppa-completions]
+use completions.nu [ppa-completions, pkg-completions]
 use packaging/launchpad.nu [normalize-ppa-name]
 use ubuntu-versions.nu [DEVEL_RELEASE, SUPPORTED_RELEASES]
 use formatting.nu [with-spinner, osc8-link]
@@ -49,6 +49,7 @@ export def --wrapped build [
     --no-deps (-d) # Skip build dependency checks (passes -d to debuild)
     --no-fetch (-f) # Don't attempt fetch upstream tarballs
     --to (-t): string # Upload to this PPA name instead of auto-generating one
+    --against: string@pkg-completions # Run this package's test suite against the upload (autopkgtest submission)
     ...debuild_flags: string # Extra flags to pass to debuild
 ]: nothing -> nothing {
     if $deps and $no_deps {
@@ -67,7 +68,7 @@ export def --wrapped build [
     debuild -S -sa ...$d_flag ...$debuild_flags
 
     let ppa_name = if ($to | is-not-empty) { $to } else { gen-ppa-name }
-    up $ppa_name --proposed=$proposed --security=$security --backports=$backports
+    up $ppa_name --proposed=$proposed --security=$security --backports=$backports --against $against
 }
 
 # Create a named PPA, dput the .changes, wait for build, auto-submit autopkgtests, notify, and show test status.
@@ -76,6 +77,7 @@ export def up [
     --proposed (-p) # Use the proposed pocket
     --security (-s) # Use the security pocket
     --backports (-b) # Use the backports pocket
+    --against: string@pkg-completions # Run this package's test suite against the upload (autopkgtest submission)
 ]: nothing -> nothing {
     let ppa_path = (normalize-ppa-name $ppa_name)
     let pocket_args = if $proposed { [--pocket proposed]
@@ -100,7 +102,7 @@ export def up [
     # Auto-submit autopkgtest requests via cookie
     let cookie = autopkgtest-cookie-path
     let notify_text = if ($cookie | path exists) {
-        let urls = if $proposed { test-urls --proposed | where proposed } else { test-urls }
+        let urls = if $proposed { test-urls --proposed --against $against | where proposed } else { test-urls --against $against }
         let results = ($urls | par-each {|entry|
             submit-autopkgtest $entry.url $cookie
         })
@@ -146,15 +148,16 @@ export def test [
     --proposed (-p)                          # Submit only the all-proposed variants
     --ppa: string@ppa-completions            # Named PPA to test (skips local derivation)
     --no-select                              # Skip interactive selection, submit all
+    --against: string@pkg-completions        # Run this package's test suite against the upload
 ]: nothing -> nothing {
     let cookie = autopkgtest-cookie
 
     if ($ppa | is-not-empty) {
         let ppa_name = normalize-ppa-name $ppa
         let urls = if $proposed {
-            ppa-test-urls $ppa_name --proposed | where { $in =~ "all-proposed" }
+            ppa-test-urls $ppa_name --proposed --against $against | where { $in =~ "all-proposed" }
         } else {
-            ppa-test-urls $ppa_name
+            ppa-test-urls $ppa_name --against $against
         }
 
         if ($urls | is-empty) {
@@ -164,7 +167,7 @@ export def test [
 
         select-and-submit $urls $cookie --no-select=$no_select --header $"Select tests for PPA ($ppa_name):"
     } else {
-        let urls = if $proposed { test-urls --proposed | where proposed == true } else { test-urls }
+        let urls = if $proposed { test-urls --proposed --against $against | where proposed == true } else { test-urls --against $against }
 
         if ($urls | is-empty) {
             print "No test URLs generated."

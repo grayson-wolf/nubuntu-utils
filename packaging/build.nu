@@ -65,12 +65,14 @@ export def gen-ppa-name []: nothing -> string {
 # Generate autopkgtest request URLs for the current package's PPA upload.
 # Returns a table of {arch, url, proposed} records.
 export def test-urls [
-    --proposed (-p) # Include all-proposed variants
+    --proposed (-p)           # Include all-proposed variants
+    --against: string         # Run this package's test suite against the upload
 ]: nothing -> table<arch: string, url: string, proposed: bool> {
     let pkg_name = pkg-name
     let version = pkg-version
     let release_name = target-release
     let ppa = gen-ppa-name
+    let test_pkg = if ($against | is-not-empty) { $against } else { $pkg_name }
 
     # Parse architectures from debian/control
     let arches = (open debian/control
@@ -93,7 +95,7 @@ export def test-urls [
     for arch in $arches {
         let params = {
             release: $release_name
-            package: $pkg_name
+            package: $test_pkg
             arch: $arch
             trigger: $"($pkg_name)/($version)"
             ppa: $ppa_param
@@ -110,16 +112,25 @@ export def test-urls [
 export def ppa-test-urls [
     ppa_name: string
     --proposed (-p)
+    --against: string         # Run this package's test suite instead of the upload's own
 ]: nothing -> list<string> {
     let raw = (ppa tests $ppa_name --show-url | lines)
     let urls = ($raw
         | where { $in =~ "request.cgi" }
         | each {|line| $line | str trim | split row " " | where { $in starts-with "https://" } | first }
     )
-    if $proposed {
+    let urls = if $proposed {
         $urls
     } else {
         $urls | where { $in !~ "all-proposed" }
+    }
+    if ($against | is-empty) {
+        $urls
+    } else {
+        $urls | each {|url|
+            let params = ($url | url parse | get params | reduce --fold {} {|p, acc| $acc | upsert $p.key $p.value })
+            request-url ($params | upsert package $against)
+        }
     }
 }
 
@@ -138,4 +149,3 @@ export def testurl []: nothing -> nothing {
         print $"($arch): ($b_link) ($p_link)\n($base)\n"
     }
 }
-
