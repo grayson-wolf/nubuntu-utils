@@ -16,6 +16,7 @@ use packaging/sru.nu [fetch-sru-entries, build-sru-rows, print-sru-legend]
 use packaging/launchpad.nu [uploader-data, lp-ppa-entries, lp-ppa-detail, lp-display-name]
 use packaging/sponsorships.nu [fetch-sponsorships]
 use packaging/watchlist.nu [load-watchlist, save-watchlist]
+use packaging/source-packages.nu [is-source-package]
 use completions.nu [release-completions]
 use formatting.nu [osc8-link, lp-bug-link, lp-source-link, with-spinner, bool-glyph, fmt-mib, fmt-date-relative]
 use ubuntu-versions.nu [DEVEL_RELEASE, LATEST_STABLE_RELEASE]
@@ -221,8 +222,30 @@ export def "my watchlist add" [
         print -e $"(ansi yellow)All packages already on watchlist.(ansi reset)"
         return
     }
-    save-watchlist ($wl | append $added)
-    print -e $"(ansi green)Added:(ansi reset) ($added | str join ', ')"
+
+    # Validate each candidate against the canonical source-package list.
+    let checked = ($added | each {|pkg|
+        match (is-source-package $pkg) {
+            true => { pkg: $pkg, ok: true }
+            false => { pkg: $pkg, ok: false }
+            null => { pkg: $pkg, ok: true, unverified: true }
+        }
+    })
+    let invalid = ($checked | where { not $in.ok } | get pkg)
+    let unverified = ($checked | where { ($in | get -o unverified | default false) } | get pkg)
+    let valid = ($checked | where { $in.ok } | get pkg)
+
+    if ($invalid | is-not-empty) {
+        print -e $"(ansi red)Not a source package, skipping:(ansi reset) ($invalid | str join ', ')"
+    }
+    if ($unverified | is-not-empty) {
+        print -e $"(ansi yellow)Could not verify (offline?):(ansi reset) ($unverified | str join ', ')"
+    }
+    if ($valid | is-empty) {
+        return
+    }
+    save-watchlist ($wl | append $valid)
+    print -e $"(ansi green)Added:(ansi reset) ($valid | str join ', ')"
 }
 
 # Remove one or more source packages from the watchlist.

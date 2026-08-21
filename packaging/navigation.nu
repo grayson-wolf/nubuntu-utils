@@ -4,6 +4,7 @@ use ../completions.nu [pkg-completions]
 use ../formatting.nu [with-spinner]
 use cache.nu *
 use build.nu [tarme]
+use source-packages.nu [is-known-source-package]
 
 # Make a directory and immediately enter it.
 def --env mkcd [path: string]: nothing -> nothing {
@@ -11,20 +12,9 @@ def --env mkcd [path: string]: nothing -> nothing {
     cd $path
 }
 
-# Check whether a package name exists in the Ubuntu or Debian archive via rmadison.
-# Returns true if found in either archive, false otherwise.
-def pkg-valid [package: string]: nothing -> bool {
-    let ubuntu = (rmadison $package | complete)
-    if not ($ubuntu.stdout | str trim | is-empty) { return true }
-    let debian = (rmadison -u debian $package | complete)
-    not ($debian.stdout | str trim | is-empty)
-}
-
 # Get or go to a package
 # If the package exists locally, cd into it. Otherwise, fetch it with git-ubuntu.
 # Use -r to force-remove and refetch the package.
-# Validates the package name against the archive before any filesystem changes.
-# On fresh clones, creates a local `debian/sid` branch tracking `pkg/debian/sid`.
 export def --env pkg [
     package: string@pkg-completions # the name of the package to fetch or go to
     --refetch (-r) # Force-remove and refetch the package
@@ -42,9 +32,10 @@ export def --env pkg [
     if ($pkg_dir | path exists) {
         cd $pkg_dir
     } else {
-        let valid = with-spinner $"Validating ($package)..." { pkg-valid $package }
-        if not $valid {
-            error make { msg: $"($package) is not a known source package in Ubuntu or Debian." }
+        match (with-spinner $"Validating ($package)..." { is-known-source-package $package }) {
+            false => { error make { msg: $"($package) is not a known source package in Ubuntu or Debian." } }
+            null => { print -e $"(ansi yellow)Could not verify ($package) \(offline?\); proceeding anyway.(ansi reset)" }
+            true => {}
         }
 
         mkcd ($pkgs_root | path join $package)
