@@ -34,6 +34,10 @@ parts:
       - wrappers/**
       - bin/launch
       - bin/aliases
+    override-stage: |
+      craftctl default
+      # Make all the files world-readable (they're scripts anyways)
+      chmod -R a+r "$CRAFT_STAGE"
     organize:
       mod.nu: nubuntu-utils/mod.nu
       env.nu: nubuntu-utils/env.nu
