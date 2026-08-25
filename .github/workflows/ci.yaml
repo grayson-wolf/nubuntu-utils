@@ -1,0 +1,163 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  NUBUNTU_CACHE_DIR: /tmp/nbcache
+  NUBUNTU_STATE_DIR: /tmp/nbstate
+  LAUNCHPAD_NAME: graysonwolf
+
+jobs:
+  native:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install nushell (latest release binary)
+        run: |
+          NU_VERSION=$(curl -sI https://github.com/nushell/nushell/releases/latest | grep -i ^location: | sed 's|.*/||' | tr -d '\r')
+          echo "Installing nushell ${NU_VERSION}"
+          curl -sL "https://github.com/nushell/nushell/releases/download/${NU_VERSION}/nu-${NU_VERSION}-x86_64-unknown-linux-gnu.tar.gz" -o /tmp/nu.tar.gz
+          sudo tar xz -C /usr/local/bin --strip-components=1 -f /tmp/nu.tar.gz
+          nu --version
+
+      - name: Smoke check — every module parses and the barrel loads
+        run: |
+          nu -c 'source env.nu; use ./ *; print OK' | grep -qx OK
+
+      - name: Curated namespace — public commands present, helpers absent
+        run: |
+          nu -c '
+            source env.nu
+            use ./ *
+            let names = (scope commands | get name)
+
+            # Every snap app must reach the user namespace.
+            let expected = [
+              excuses my excuses-clusters archive-tests
+              retry-regressions migration-reference poc revdeps dep-components
+              madison p q pkg salsa spawn ephemeral lppush sru-list merges
+              unapproved buildin cpbd dch-bump getdeps images lxc-reap
+              lxc-reap-all tarme testin testurl test-urls withgit dr
+              "dr auto" "dr continue" "dr abort" "my excuses" "my srus"
+              "my ppas" "my sponsorships" "my watchlist" "my watchlist add"
+              "my watchlist rm"
+            ]
+            let missing = ($expected | where {|c| $c not-in $names })
+            if ($missing | is-not-empty) {
+              error make { msg: $"public commands missing from namespace: ($missing | str join ", ")" }
+            }
+
+            # Internal helpers must NOT leak through the curated barrels.
+            # Choose some arbitrary sample for smoke-test reasons
+            let helpers = [pkg-name request-url format-verdict cache-file http-get]
+            let leaked = ($helpers | where {|h| $h in $names })
+            if ($leaked | is-not-empty) {
+              error make { msg: $"helpers leaked into public namespace: ($leaked | str join ", ")" }
+            }
+            print "namespace OK"
+          '
+
+      - name: Subcommand dispatch works (bare `my` prints help)
+        run: |
+          nu -c 'source env.nu; use ./ *; my' | grep -q excuses
+
+  functional:
+    # Tests for some of the most commonly used commands that don't require authentication
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install nushell (latest release binary)
+        run: |
+          NU_VERSION=$(curl -sI https://github.com/nushell/nushell/releases/latest | grep -i ^location: | sed 's|.*/||' | tr -d '\r')
+          echo "Installing nushell ${NU_VERSION}"
+          curl -sL "https://github.com/nushell/nushell/releases/download/${NU_VERSION}/nu-${NU_VERSION}-x86_64-unknown-linux-gnu.tar.gz" -o /tmp/nu.tar.gz
+          sudo tar xz -C /usr/local/bin --strip-components=1 -f /tmp/nu.tar.gz
+          nu --version
+
+      - name: Install command dependencies
+        run: |
+          sudo apt-get update
+          # for rmadison and quilt
+          sudo apt-get install -y devscripts quilt
+
+      - name: Run the native functional checks
+        run: nu tests/ci/run.nu
+
+  snap:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up snapcraft
+        run: |
+          sudo snap install lxd
+          sudo lxd init --auto
+          sudo snap install snapcraft --classic
+          sudo usermod -aG lxd "$USER"
+
+      - name: Give the LXD bridge outbound network access
+        # let LXD own NAT on the bridge, enable forwarding, flush the
+        # conflicting rules, and open ufw for lxdbr0.
+        run: |
+          set -e
+          sudo lxc network set lxdbr0 ipv4.nat true
+          sudo lxc network set lxdbr0 ipv6.nat true || true
+          sudo sysctl -w net.ipv4.ip_forward=1
+          # Docker's chains can blackhole the bridge; flush and let LXD
+          # re-create its rules cleanly on the next instance start.
+          sudo iptables -F
+          sudo iptables -t nat -F
+          sudo iptables -t mangle -F
+          sudo iptables -X || true
+          sudo nft flush ruleset || true
+          sudo ufw disable || true
+          # Restart LXD so it re-applies its own NAT rules for lxdbr0.
+          sudo snap restart lxd || sudo systemctl restart snap.lxd.daemon || true
+
+      - name: Pack the snap
+        # Run snapcraft pack with the lxd group active
+        run: sg lxd -c 'snapcraft pack --verbosity verbose'
+
+      - name: Install the snap (dangerous, classic)
+        run: |
+          sudo snap install --dangerous --classic ./nubuntu-utils_*_amd64.snap
+          snap list nubuntu-utils
+
+      - name: Sanity — gum reachable via the snap PATH append
+        run: |
+          sudo snap run --shell nubuntu-utils.my -c 'command -v gum'
+
+      - name: Every app dispatches through bin/launch
+        run: |
+          set -e
+          # Make sure every command at least makes it to --help
+          for app in excuses my excuses-clusters archive-tests \
+                     retry-regressions migration-reference poc revdeps \
+                     dep-components madison p q pkg salsa spawn ephemeral \
+                     lppush sru-list merges unapproved buildin cpbd dch-bump \
+                     getdeps images lxc-reap lxc-reap-all tarme testin testurl \
+                     test-urls dr; do
+            echo "=== nubuntu-utils.$app ==="
+            out=$(timeout 60 "nubuntu-utils.$app" --help 2>&1) || true
+            if echo "$out" | grep -qE "nu::parser|error while loading|named_as_module|Module .* not found"; then
+              echo "$out"
+              exit 1
+            fi
+          done
+
+          echo "=== nubuntu-utils.withgit ==="
+          GITHUB_TOKEN=ci-dummy timeout 60 nubuntu-utils.withgit git --version | grep -q "git version"
+
+          nubuntu-utils.my | grep -q excuses
+
+      - name: nubuntu-shell loads the wrapper config
+        run: |
+          timeout 60 nubuntu-utils.nubuntu-shell -c 'print "shell-ok"' | grep -q shell-ok
+
+      - name: Run the snap functional checks
+        run: bash tests/ci/snap.sh
