@@ -78,7 +78,7 @@ excuses libsdl3 | where package =~ "freerdp"
 | `NUBUNTU_CACHE_DIR` | `~/.cache/nubuntu-utils` | Cache directory (cookie, team mapping, etc.) |
 | `NUBUNTU_STATE_DIR` | `~/.local/state/nubuntu-utils` | Persistent state directory |
 | `QUILT_PATCHES` | `debian/patches` | Quilt patches directory |
-| `EDITOR` | — | Editor used by `qedit` and other interactive commands |
+| `EDITOR` | — | Editor used by `q edit` and other interactive commands |
 
 ## Commands
 

@@ -65,9 +65,6 @@ apps:
   my:
     command: bin/launch my
 
-  my-excuses:
-    command: bin/launch my-excuses
-
   excuses-clusters:
     command: bin/launch excuses-clusters
 

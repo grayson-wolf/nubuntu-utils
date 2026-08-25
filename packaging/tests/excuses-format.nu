@@ -54,7 +54,7 @@ def format-status [status: string, log_url: string, refined: string = ""]: nothi
 const REFINABLE_STATUSES = ["REGRESSION"]
 
 # Refined log-derived statuses that count as a real test regression (not
-# infrastructure / install / harness failure). Used by my-excuses --failing.
+# infrastructure / install / harness failure). Used by my excuses --failing.
 export const REAL_FAIL_REFINED = ["FAIL", "FAIL_STDERR", "FAIL_TIMEOUT", "BROKEN"]
 
 # Given a list of unique log URLs, fetch and classify each in parallel.

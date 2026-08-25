@@ -245,7 +245,7 @@ def print-excuses-detail [data: record, pkg: string]: nothing -> nothing {
     print -e ""
 }
 
-# `my-excuses` (now `my excuses`) lives in my.nu — see that module.
+# `my excuses` lives in my.nu — see that module.
 
 # Show the largest co-migration clusters currently blocking proposed migration.
 # Each row is a group of packages that must all migrate together (linked by
