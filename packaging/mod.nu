@@ -13,4 +13,5 @@ export use deps.nu [dep-components, revdeps, madison]
 export use sru.nu [sru-list]
 export use merges.nu
 export use unapproved.nu
+export use nbs.nu [nbs-report]
 export use tests/ *

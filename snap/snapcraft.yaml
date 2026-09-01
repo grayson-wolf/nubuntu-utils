@@ -123,6 +123,9 @@ apps:
   unapproved:
     command: bin/launch unapproved
 
+  nbs-report:
+    command: bin/launch nbs-report
+
   buildin:
     command: bin/launch buildin
 

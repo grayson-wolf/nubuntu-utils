@@ -58,7 +58,14 @@ check_sru_list() {
     printf '%s' "$out" | grep -q package || { printf '%s\n' "$out"; return 1; }
 }
 
-for c in archive_tests excuses revdeps poc merges sru_list; do
+# nbs-report — renders the current report's per-package summary table.
+check_nbs_report() {
+    local out
+    out=$(timeout 120 nubuntu-utils.nbs-report 2>&1)
+    printf '%s' "$out" | grep -q "rdeps" || { printf '%s\n' "$out"; return 1; }
+}
+
+for c in archive_tests excuses revdeps poc merges sru_list nbs_report; do
     echo "--- $c ---"
     if out=$("check_$c" 2>&1); then ok "$c"; else bad "$c" "$out"; fi
 done
