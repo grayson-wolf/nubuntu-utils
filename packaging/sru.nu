@@ -2,9 +2,9 @@
 
 use ../completions.nu [release-completions]
 use ../formatting.nu [osc8-link, lp-source-link, days-to-duration, with-spinner, version-delta]
-use ../ubuntu-versions.nu [LATEST_STABLE_RELEASE]
+use ../ubuntu-versions.nu [LATEST_STABLE_RELEASE, ALL_RELEASES]
 
-const SRU_REPORT_URL = "https://ubuntu-archive-team.ubuntu.com/sru_report.yaml"
+const SRU_REPORT_URL = "https://static-reports.ubuntu.com/pending-sru/sru_report.yaml"
 
 # Format a bug ID with color based on its class, as a clickable hyperlink.
 def format-bug [bug: record]: nothing -> string {
@@ -55,9 +55,15 @@ export def fetch-sru-entries [series: string, all_series: bool]: nothing -> any 
             $row.items | each {|item| $item | insert series $row.series }
         } | flatten
     } else {
+        let bad_keys = ($data | columns | where {|k| $k not-in ($ALL_RELEASES | get name) })
+        if ($bad_keys | is-not-empty) {
+            error make { msg: $"SRU report looks malformed (unexpected keys: ($bad_keys | str join ', ')) — likely a transient fetch problem" }
+        }
         let items = ($data | get -o $series | default [])
         if ($items | is-empty) {
-            error make { msg: $"No SRU data for series '($series)'. Available: ($data | columns | str join ', ')" }
+            if $series not-in ($ALL_RELEASES | get name) {
+                error make { msg: $"Unknown Ubuntu series '($series)'" }
+            }
         }
         $items
     }

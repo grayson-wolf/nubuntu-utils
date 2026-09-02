@@ -4,7 +4,11 @@ use ../../../mod.nu *
 use lib.nu *
 
 let rows = (sru-list)
-let cols = ($rows | get 0? | default {} | columns)
+if ($rows | is-empty) {
+    print "sru-list OK: series has no pending SRUs"
+    return
+}
+let cols = ($rows | get 0 | columns)
 for c in [package age -release -updates -proposed signer creator bugs] {
     if ($c not-in $cols) { fail $"sru-list: missing column ($c)" }
 }

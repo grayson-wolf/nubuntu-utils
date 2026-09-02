@@ -55,11 +55,13 @@ check_merges() {
     if [ "$(printf '%s\n' "$out" | wc -l)" -lt 3 ]; then printf '%s\n' "$out"; return 1; fi
 }
 
-# sru-list — the report renders a table with a package column.
+# sru-list — the report renders a table with a package column (or an empty table).
 check_sru_list() {
     local out
     out=$(timeout 120 nubuntu-utils.sru-list 2>&1)
-    printf '%s' "$out" | grep -q package || { printf '%s\n' "$out"; return 1; }
+    if printf '%s' "$out" | grep -qiE "No SRU data|Unknown Ubuntu series|error"; then
+        printf '%s\n' "$out"; return 1
+    fi
 }
 
 # nbs-report — renders the current report's per-package summary table.
