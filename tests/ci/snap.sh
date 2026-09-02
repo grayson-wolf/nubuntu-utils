@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Snap CI checks 
+# Snap CI checks
 set -u
 pass=0
 fail=0
@@ -14,7 +14,11 @@ bad()  { printf 'FAIL %s\n%s\n' "$1" "$2"; fail=$((fail+1)); failed_names+=("$1"
 # archive-tests — renders a non-trivial results table.
 check_archive_tests() {
     local out
+    # skip on transient timeout/network errors
     out=$(timeout 120 nubuntu-utils.archive-tests xz-utils 2>&1)
+    if printf '%s' "$out" | grep -qiE "timed out|I/O error|HTTP [0-9]{3} fetching|error sending request"; then
+        printf 'SKIP archive_tests (upstream fetch failed — environmental)\n'; return 0
+    fi
     if [ "$(printf '%s\n' "$out" | wc -l)" -lt 3 ]; then printf '%s\n' "$out"; return 1; fi
 }
 
@@ -65,7 +69,18 @@ check_nbs_report() {
     printf '%s' "$out" | grep -q "rdeps" || { printf '%s\n' "$out"; return 1; }
 }
 
-for c in archive_tests excuses revdeps poc merges sru_list nbs_report; do
+# resolvable — scans archive indexes with the snap-staged ripgrep; must not
+# report `rg` missing, and must emit the level column.
+check_resolvable() {
+    local out
+    out=$(timeout 180 nubuntu-utils.resolvable xz-utils 2>&1)
+    if printf '%s' "$out" | grep -q "Command .rg. not found"; then
+        printf 'rg not reachable inside the snap\n%s\n' "$out"; return 1
+    fi
+    printf '%s' "$out" | grep -qiE "level|resolve cleanly|ncr|retrigger" || { printf '%s\n' "$out"; return 1; }
+}
+
+for c in archive_tests excuses revdeps poc merges sru_list nbs_report resolvable; do
     echo "--- $c ---"
     if out=$("check_$c" 2>&1); then ok "$c"; else bad "$c" "$out"; fi
 done

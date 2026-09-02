@@ -82,8 +82,8 @@ jobs:
       - name: Install command dependencies
         run: |
           sudo apt-get update
-          # for rmadison and quilt
-          sudo apt-get install -y devscripts quilt
+          # required dependencies for the commands under test
+          sudo apt-get install -y devscripts quilt ripgrep
 
       - name: Run the native functional checks
         run: nu tests/ci/run.nu
