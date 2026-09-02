@@ -9,7 +9,7 @@ Works from any shell (bash, zsh, fish) via snap, with full native pipeline suppo
 
 ```bash
 # APT packages
-sudo apt install devscripts ubuntu-dev-tools dput-ng quilt autopkgtest git gh libnotify-bin
+sudo apt install devscripts ubuntu-dev-tools dput-ng quilt autopkgtest git gh libnotify-bin ripgrep
 
 # Snaps
 sudo snap install ppa-dev-tools --edge
