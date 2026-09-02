@@ -2,8 +2,8 @@
 
 use ../ubuntu-versions.nu [DEVEL_RELEASE]
 use ../formatting.nu [with-spinner, lp-source-link]
-use ../completions.nu [pkg-completions]
-use deb822.nu [fetch-index, parse-bin-stanza, parse-src-stanza, stanza-raw, files-contain, provider-of, version-satisfies]
+use ../completions.nu [pkg-completions, arch-completions]
+use deb822.nu [fetch-index, parse-bin-stanza, parse-src-stanza, stanza-raw, files-contain, files-provide, provider-of, version-satisfies]
 
 const COMPONENTS = [main universe]
 
@@ -12,11 +12,12 @@ const COMPONENTS = [main universe]
 
 # A lazily-resolving view over the two pockets. Each field is the LIST of cached
 # index file paths for that pocket (one per component)
-def pocket-view [series: string]: nothing -> record {
+def pocket-view [series: string, arch: string]: nothing -> record {
     {
         series: $series
-        bin_rel: ($COMPONENTS | each {|c| fetch-index $series "release" $c "Packages" })
-        bin_prop: ($COMPONENTS | each {|c| fetch-index $series "proposed" $c "Packages" })
+        # Sources indexes are arch-independent; only Packages is per-arch.
+        bin_rel: ($COMPONENTS | each {|c| fetch-index $series "release" $c "Packages" --arch $arch })
+        bin_prop: ($COMPONENTS | each {|c| fetch-index $series "proposed" $c "Packages" --arch $arch })
         src_rel: ($COMPONENTS | each {|c| fetch-index $series "release" $c "Sources" })
         src_prop: ($COMPONENTS | each {|c| fetch-index $series "proposed" $c "Sources" })
     }
@@ -25,9 +26,9 @@ def pocket-view [series: string]: nothing -> record {
 # Newest binary stanza across both pockets (proposed wins when present).
 def binary-best [view: record, name: string]: nothing -> record {
     let prop = (stanza-raw $view.bin_prop $name)
-    if ($prop | is-not-empty) { return (parse-bin-stanza $prop) }
+    if ($prop | is-not-empty) { return ((parse-bin-stanza $prop) | upsert pocket "proposed") }
     let rel = (stanza-raw $view.bin_rel $name)
-    if ($rel | is-not-empty) { return (parse-bin-stanza $rel) }
+    if ($rel | is-not-empty) { return ((parse-bin-stanza $rel) | upsert pocket "release") }
     {}
 }
 
@@ -92,11 +93,11 @@ def relation-ok-memo [view: record, rel: string, memo: record]: nothing -> recor
     # this exact atom (the release binary that did provide it is then superseded in apt's newest-first resolution).
 
     # check if the package never existed in release, if it didn't we don't care
-    let rel_has = (files-contain $view.bin_rel $rel)
+    let rel_has = (files-provide $view.bin_rel $rel)
     if not $rel_has { return { ok: true, memo: $memo } }
 
     # check if a proposed provider still has it, if it does, things are fine
-    let prop_has = (files-contain $view.bin_prop $rel)
+    let prop_has = (files-provide $view.bin_prop $rel)
     if $prop_has { return { ok: true, memo: $memo } }
 
     # in release but not proposed, so check if the provider is still in proposed.
@@ -125,7 +126,14 @@ def classify-dep-memo [view: record, name: string, memo: record]: nothing -> rec
             $broken = ($broken | append ($rel | str replace -r '\s*\(.*\)$' ''))
         }
     }
+
+    # status selector
+    # - not broken: fine
+    # - broken, already built in proposed: ncr
+    # - broken, source in proposed and FTBFS: retrigger
+    # - broken, source not in proposed: ncr
     let status = if ($broken | is-empty) { "fine"
+        } else if ($best.pocket == "proposed") { "ncr"
         } else if (source-in-proposed $view $src) { "retrigger"
         } else { "ncr" }
     { row: { name: $name, status: $status, version: $best.version, source: $src, broken: $broken }, memo: $memo }
@@ -215,9 +223,10 @@ export def main [
     package: string@pkg-completions   # Source package to analyze
     --recursive (-r)                  # Also analyze the build-deps of broken deps
     --series: string = $DEVEL_RELEASE # Series to check (default: devel)
+    --arch (-a): string@arch-completions = "amd64" # Binary arch whose Packages indexes to resolve against
     --raw                             # Return structured rows (no color/links)
 ]: nothing -> table {
-    let view = (with-spinner $"Fetching ($series) archive indexes..." { pocket-view $series })
+    let view = (with-spinner $"Fetching ($series)/($arch) archive indexes..." { pocket-view $series $arch })
 
     if (source-best $view $package | is-empty) {
         error make { msg: $"No source package '($package)' found in ($series) / ($series)-proposed" }

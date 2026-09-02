@@ -1,6 +1,6 @@
 # Shared custom completers for packaging commands
 
-use ubuntu-versions.nu [SUPPORTED_RELEASES]
+use ubuntu-versions.nu [SUPPORTED_RELEASES, ARCHES]
 use packaging/launchpad.nu [lp-ppa-names]
 
 # Supported Ubuntu release names
@@ -58,6 +58,11 @@ export def my-subcommand-completions []: nothing -> list<string> {
 # Archive components served by merge-o-matic (merges.ubuntu.com/<c>.json).
 export def component-completions []: nothing -> list<string> {
     ["main" "universe" "multiverse" "restricted"]
+}
+
+# Archive architectures (for --arch flags).
+export def arch-completions []: nothing -> list<string> {
+    $ARCHES
 }
 
 # Local git branch names (for --from-branch and other ref flags).

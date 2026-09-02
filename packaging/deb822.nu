@@ -10,14 +10,16 @@ export def fetch-index [
     pocket: string
     component: string
     kind: string              # Packages | Sources
+    --arch: string = "amd64"  # binary arch for the Packages index (Sources is arch-independent)
     --ttl: duration = $INDEX_TTL
 ]: nothing -> string {
     let suite = if ($pocket == "release") { $series } else { $"($series)-($pocket)" }
-    let key = (cache-key $"($suite)-($component)-($kind).txt")
+    let sub = if ($kind == "Packages") { $"binary-($arch)/Packages.xz" } else { "source/Sources.xz" }
+    # cache key must include the arch so amd64/arm64 indexes don't collide
+    let key = (cache-key $"($suite)-($component)-($arch)-($kind).txt")
     let path = (cache-file "deb822" $key)
     if (cache-fresh $path $ttl) { return $path }
 
-    let sub = if ($kind == "Packages") { $"binary-amd64/Packages.xz" } else { "source/Sources.xz" }
     let url = $"https://archive.ubuntu.com/ubuntu/dists/($suite)/($component)/($sub)"
     (http-get --raw $url) | ^xz -d | decode utf-8 | save -f $path
     $path
@@ -85,6 +87,17 @@ export def stanza-raw [files: list<string>, name: string]: nothing -> string {
 export def files-contain [files: list<string>, needle: string]: nothing -> bool {
     for f in $files {
         if (^rg -F -q $needle $f | complete | get exit_code) == 0 { return true }
+    }
+    false
+}
+
+# Does any of the given files PROVIDE the literal virtual atom (i.e. it appears
+# on a Provides: line)? Unlike files-contain, this is not fooled by the atom
+# appearing on some other package's Depends: line.
+export def files-provide [files: list<string>, atom: string]: nothing -> bool {
+    let esc = ($atom | str replace -a -r '[.+*?^$(){}\[\]|\\]' '\$0')
+    for f in $files {
+        if (^rg -q --no-filename -e ('^Provides:.*\b' + $esc + '\b') $f | complete | get exit_code) == 0 { return true }
     }
     false
 }
