@@ -41,7 +41,7 @@ jobs:
               retry-regressions migration-reference poc revdeps dep-components
               madison p q pkg salsa spawn ephemeral lppush sru-list merges
               unapproved buildin cpbd dch-bump getdeps images lxc-reap
-              lxc-reap-all tarme testin testurl test-urls withgit dr
+              lxc-reap-all tarme testin testurl test-urls withgit dr resolvable
               "dr auto" "dr continue" "dr abort" "my excuses" "my srus"
               "my ppas" "my sponsorships" "my watchlist" "my watchlist add"
               "my watchlist rm"
@@ -141,7 +141,7 @@ jobs:
                      dep-components madison p q pkg salsa spawn ephemeral \
                      lppush sru-list merges unapproved buildin cpbd dch-bump \
                      getdeps images lxc-reap lxc-reap-all tarme testin testurl \
-                     test-urls dr; do
+                     test-urls dr resolvable; do
             echo "=== nubuntu-utils.$app ==="
             out=$(timeout 60 "nubuntu-utils.$app" --help 2>&1) || true
             if echo "$out" | grep -qE "nu::parser|error while loading|named_as_module|Module .* not found"; then

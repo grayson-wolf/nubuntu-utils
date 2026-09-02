@@ -33,6 +33,7 @@ def archive-control-needs-vm [pkg: string, series: string]: nothing -> bool {
 export def buildin [
     distro: string@release-completions # The distro to build in (e.g., noble, resolute, stonking)
     --binary (-b)                      # Also build binary packages
+    --proposed (-p)                    # Build against the distro's -proposed pocket
 ]: nothing -> nothing {
     let pkg = (pkg-name)
     let ver = (pkg-version)
@@ -72,6 +73,26 @@ export def buildin [
     # in time and their package lists go stale (old .debs 404 once superseded
     # in the archive).
     gum spin --show-error --title "Updating apt lists in container..." -- lxc exec $container -- apt-get update -qq
+
+    # Enable -proposed (mirrors autopkgtest --apt-pocket=proposed): derive a
+    # <distro>-proposed stanza from the container's own deb822 ubuntu.sources,
+    # and pin it to 500 to neutralize NotAutomatic so build-dep resolution
+    # pulls from proposed. The pre-image refresh above keeps apt-get update
+    # here quick.
+    if $proposed {
+        with-spinner $"Enabling ($distro)-proposed in container..." {
+            let result = (^lxc exec $container -- bash -c $"
+                sed -e 's/^Types: .*/Types: deb deb-src/' \\
+                    -e 's/^Suites: .*/Suites: ($distro)-proposed/' \\
+                    /etc/apt/sources.list.d/ubuntu.sources > /etc/apt/sources.list.d/buildin-proposed.sources
+                printf 'Package: *\\nPin: release ($distro)-proposed\\nPin-Priority: 500\\n' > /etc/apt/preferences.d/buildin-proposed.pref
+                apt-get update -qq
+            " | complete)
+            if $result.exit_code != 0 {
+                error make { msg: $"Failed to enable ($distro)-proposed: ($result.stderr)" }
+            }
+        }
+    }
 
     # Install build tooling
     gum spin --show-error --title "Installing build tools in container..." -- lxc exec $container -- apt-get install -y -qq build-essential debhelper devscripts equivs
@@ -210,7 +231,7 @@ export def testin [
         mut found = (glob $"../*_($ver)_amd64.changes" | first | default "")
         if ($found | is-empty) {
             print $"(ansi yellow)No binary build found for ($ver) — building one with buildin --binary first.(ansi reset)"
-            buildin $distro --binary
+            buildin $distro --binary --proposed=$proposed
             $found = (glob $"../*_($ver)_amd64.changes" | first | default "")
             if ($found | is-empty) {
                 error make { msg: $"buildin --binary did not produce a ../*_($ver)_amd64.changes" }

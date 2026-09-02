@@ -106,6 +106,7 @@ excuses libsdl3 | where package =~ "freerdp"
 | `poc` | Check which team(s) own a package |
 | `revdeps` | List reverse dependencies of a package |
 | `madison` | Query where a package is published across the archive (version/suite/component/arches per series), as a table |
+| `resolvable` | Show which of a source package's build-deps stop resolving once -proposed is enabled |
 
 ### Building
 

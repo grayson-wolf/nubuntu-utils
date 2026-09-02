@@ -61,6 +61,7 @@ parts:
       - curl
       - xz-utils
       - gum
+      - ripgrep
 
 apps:
   excuses:
@@ -92,6 +93,9 @@ apps:
 
   madison:
     command: bin/launch madison
+
+  resolvable:
+    command: bin/launch resolvable
 
   p:
     command: bin/launch p
