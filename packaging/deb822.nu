@@ -4,6 +4,19 @@ use http.nu [http-get]
 
 const INDEX_TTL = 10min
 
+# Arches served by archive.ubuntu.com. Everything else (armhf, ppc64el,
+# riscv64, s390x — the ports arches, plus arm64) lives on ports.ubuntu.com.
+const ARCHIVE_ARCHES = [amd64 amd64v3 i386]
+
+# The mirror host serving a given arch's Packages index.
+def index-host [arch: string]: nothing -> string {
+    if $arch in $ARCHIVE_ARCHES {
+        "https://archive.ubuntu.com/ubuntu"
+    } else {
+        "https://ports.ubuntu.com/ubuntu-ports"
+    }
+}
+
 # Fetch a pocket index (Packages or Sources), cached to disk. Returns the cache FILE PATH
 export def fetch-index [
     series: string
@@ -20,8 +33,15 @@ export def fetch-index [
     let path = (cache-file "deb822" $key)
     if (cache-fresh $path $ttl) { return $path }
 
-    let url = $"https://archive.ubuntu.com/ubuntu/dists/($suite)/($component)/($sub)"
-    (http-get --raw $url) | ^xz -d | decode utf-8 | save -f $path
+    # Sources indexes are arch-independent and always on the archive host;
+    # only Packages is per-arch (and may be a ports arch).
+    let host = if ($kind == "Sources") { "https://archive.ubuntu.com/ubuntu" } else { index-host $arch }
+    let url = $"($host)/dists/($suite)/($component)/($sub)"
+    let raw = (http-get --raw $url)
+    if $raw == null {
+        error make { msg: $"No ($kind) index for ($suite)/($component)/($arch) — 404, arch may not exist for this series" }
+    }
+    $raw | ^xz -d | decode utf-8 | save -f $path
     $path
 }
 

@@ -273,9 +273,15 @@ export def main [
         | uniq-by source
         | sort-by level source)
     let n_fine = ($results | where status == "fine" | length)
+    let missing = ($results | where status == "missing" | uniq-by name | sort-by name)
+
+    # A missing build-dep is not "fine", say so explicitly
+    if ($missing | is-not-empty) {
+        print $"(ansi dark_gray)not built for ($arch): (($missing | get name | str join ', '))(ansi reset)"
+    }
 
     if ($actionable | is-empty) {
-        print $"(ansi green)All ($n_fine) build-deps resolve cleanly with ($series)-proposed enabled.(ansi reset)"
+        print $"(ansi green)All ($n_fine) present build-deps resolve cleanly with ($series)-proposed enabled.(ansi reset)"
         return []
     }
 
