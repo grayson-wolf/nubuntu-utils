@@ -142,12 +142,21 @@ export def buildin [
             ^lxc file pull $"($container)/root/($f)" $"($parent)/" | complete | ignore
         }
 
-        # Binary build outputs (--binary): pull the built .deb(s) too.
+        # Binary build outputs (--binary): pull every artifact the .changes
+        # references
         if $binary {
-            let matches = (^lxc exec $container -- bash -c $"ls /root/($pkg)_($ver)_*.deb 2>/dev/null" | complete)
-            if $matches.exit_code == 0 {
-                for f in ($matches.stdout | lines | where { $in | is-not-empty }) {
-                    ^lxc file pull $"($container)/root/($f)" $"($parent)/" | complete | ignore
+            let names = (
+                open $"($parent)/($changes)"
+                | lines
+                | skip until { $in =~ '^Checksums-Sha256:' }
+                | skip 1
+                | take while { $in =~ '^ ' }
+                | each { split row --regex '\s+' | last }
+            )
+            for f in $names {
+                let result = (^lxc file pull $"($container)/root/($f)" $"($parent)/" | complete)
+                if $result.exit_code != 0 {
+                    error make { msg: $"Failed to pull binary artifact ($f): ($result.stderr)" }
                 }
             }
         }
@@ -192,8 +201,18 @@ export def buildin [
         print $"  ($buildinfo)"
         print $"  ($pkg)_($ver).debian.tar.xz"
         if $binary {
-            let debs = (glob $"($parent)/($pkg)_($ver)_*.deb")
-            for deb in $debs { print $"  ($deb | path basename)" }
+            # Same manifest as the pull step: every file the .changes lists.
+            # A name glob ($pkg)_*.deb misses dbgsym .ddebs and any binary
+            # whose name differs from the source package's.
+            let names = (
+                open $"($parent)/($changes)"
+                | lines
+                | skip until { $in =~ '^Checksums-Sha256:' }
+                | skip 1
+                | take while { $in =~ '^ ' }
+                | each { split row --regex '\s+' | last }
+            )
+            for f in $names { print $"  ($f)" }
         }
     }
 
