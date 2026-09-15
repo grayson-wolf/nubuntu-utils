@@ -50,7 +50,7 @@ export def --wrapped build [
     --no-fetch (-f) # Don't attempt fetch upstream tarballs
     --to (-t): string # Upload to this PPA name instead of auto-generating one
     --against: string@pkg-completions # Run this package's test suite against the upload (autopkgtest submission)
-    --no-wait (-w) # just perform the upload, don't wait for build/test
+    --fast (-f) # don't attempt to make the PPA, don't wait for tests
     ...debuild_flags: string # Extra flags to pass to debuild
 ]: nothing -> nothing {
     if $deps and $no_deps {
@@ -69,8 +69,9 @@ export def --wrapped build [
     debuild -S -sa ...$d_flag ...$debuild_flags
 
     let ppa_name = if ($to | is-not-empty) { $to } else { gen-ppa-name }
-    if $no_wait {
-      up $ppa_name --proposed=$proposed --security=$security --backports=$backports --against $against --no-wait
+    if $fast {
+      print "Skipping creation/wait checks"
+      up $ppa_name --proposed=$proposed --security=$security --backports=$backports --against $against --no-wait --no-create
     } else {
       up $ppa_name --proposed=$proposed --security=$security --backports=$backports --against $against
     }
@@ -84,6 +85,7 @@ export def up [
     --backports (-b) # Use the backports pocket
     --against: string@pkg-completions # Run this package's test suite against the upload (autopkgtest submission)
     --no-wait (-w) # just perform the upload, don't wait for build/test
+    --no-create (-c) # skip the creation step (assume the PPA already exists)
 ]: nothing -> nothing {
     let ppa_path = (normalize-ppa-name $ppa_name)
     let pocket_args = if $proposed { [--pocket proposed]
@@ -93,9 +95,11 @@ export def up [
 
     # ppa create exits 73 when the PPA already exists — non-fatal, just means
     # we're reusing one (e.g. retrying an upload). Any other non-zero exit is real.
-    let result = (^ppa create $ppa_name ...$pocket_args | complete)
-    if $result.exit_code != 0 and $result.exit_code != 73 {
-        error make { msg: $result.stderr }
+    if not $no_create {
+        let result = (^ppa create $ppa_name ...$pocket_args | complete)
+        if $result.exit_code != 0 and $result.exit_code != 73 {
+            error make { msg: $result.stderr }
+        }
     }
 
     let parts = ($ppa_path | split row "/")
