@@ -50,6 +50,7 @@ export def --wrapped build [
     --no-fetch (-f) # Don't attempt fetch upstream tarballs
     --to (-t): string # Upload to this PPA name instead of auto-generating one
     --against: string@pkg-completions # Run this package's test suite against the upload (autopkgtest submission)
+    --no-wait (-w) # just perform the upload, don't wait for build/test
     ...debuild_flags: string # Extra flags to pass to debuild
 ]: nothing -> nothing {
     if $deps and $no_deps {
@@ -68,7 +69,11 @@ export def --wrapped build [
     debuild -S -sa ...$d_flag ...$debuild_flags
 
     let ppa_name = if ($to | is-not-empty) { $to } else { gen-ppa-name }
-    up $ppa_name --proposed=$proposed --security=$security --backports=$backports --against $against
+    if $no_wait {
+      up $ppa_name --proposed=$proposed --security=$security --backports=$backports --against $against --no-wait
+    } else {
+      up $ppa_name --proposed=$proposed --security=$security --backports=$backports --against $against
+    }
 }
 
 # Create a named PPA, dput the .changes, wait for build, auto-submit autopkgtests, notify, and show test status.
@@ -78,6 +83,7 @@ export def up [
     --security (-s) # Use the security pocket
     --backports (-b) # Use the backports pocket
     --against: string@pkg-completions # Run this package's test suite against the upload (autopkgtest submission)
+    --no-wait (-w) # just perform the upload, don't wait for build/test
 ]: nothing -> nothing {
     let ppa_path = (normalize-ppa-name $ppa_name)
     let pocket_args = if $proposed { [--pocket proposed]
@@ -97,6 +103,11 @@ export def up [
     print $"Created PPA: ($link)"
 
     dput $"ppa:($ppa_path)" ../*.changes
+
+    if $no_wait {
+        return 0;
+    }
+    
     ppa wait $ppa_path
 
     # Auto-submit autopkgtest requests via cookie
