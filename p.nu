@@ -111,7 +111,7 @@ export def up [
     if $no_wait {
         return 0;
     }
-    
+
     ppa wait $ppa_path
 
     # Auto-submit autopkgtest requests via cookie
@@ -291,7 +291,7 @@ export def sync [
     update-maintainer
 
     git add -A
-    git commit -m "changes for test ppa build"
+    git commit -m "changes for test ppa build" --no-verify
 
     build -d
 }

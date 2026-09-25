@@ -27,19 +27,6 @@ def quiet-update-maintainer []: nothing -> nothing {
 
 # Bump the changelog version, prompt for a target Ubuntu release via gum,
 # and update the Maintainer field for Ubuntu.
-#
-# Flow: gum-choose target release (default-selected to the package's
-# most-recent Ubuntu target) → optional older-than confirm → `dch -i`
-# (with --distribution if a release was picked, so EDITOR opens with the
-# correct distro already set) → update-maintainer → commits.
-#
-# Picking "(keep UNRELEASED)" or cancelling the picker leaves the entry
-# UNRELEASED; cancelling the older-than confirm aborts before any dch call.
-#
-# By default produces two atomic commits:
-#   1. "changelog" — the dch changes
-#   2. "update-maintainer" — any debian/control{,​.in} updates
-# With --no-commit, stages nothing and makes no commits.
 export def dch-bump [
     --no-commit (-n)  # Skip all git add/commit steps
 ]: nothing -> nothing {
@@ -90,7 +77,7 @@ export def dch-bump [
 
     if not $no_commit {
         git add debian/changelog
-        git commit -m "changelog"
+        git commit -m "changelog" --no-verify
 
         # Stage any files update-maintainer modified. control.in is optional.
         git add debian/control
@@ -99,7 +86,7 @@ export def dch-bump [
         }
         let staged = (git diff --cached --name-only | lines | where { $in != "" })
         if not ($staged | is-empty) {
-            git commit -m "update-maintainer"
+            git commit -m "update-maintainer" --no-verify
         }
     }
 }
