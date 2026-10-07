@@ -36,9 +36,9 @@ export def tarme []: nothing -> nothing {
 
   # Try git-ubuntu export-orig first
   try {
-    gum spin --title $"Fetching orig tarball for ($pkg_name) ($version) with origtargz..." -- origtargz
-  } catch {
     gum spin --title $"Fetching orig tarball for ($pkg_name) ($version) with git-ubuntu..." -- git ubuntu export-orig
+  } catch {
+    gum spin --title $"Fetching orig tarball for ($pkg_name) ($version) with origtargz..." -- origtargz
   }
 }
 
