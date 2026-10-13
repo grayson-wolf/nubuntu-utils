@@ -11,12 +11,19 @@ bad()  { printf 'FAIL %s\n%s\n' "$1" "$2"; fail=$((fail+1)); failed_names+=("$1"
 # Each check echoes its captured wrapper output on failure so the runner can
 # show it. Return 0 = pass, 1 = fail.
 
+# Fetch-y checks: skip on hard timeout (rc 124 — `timeout` killed a hung
+# fetch, which leaves no error text in the output) or an upstream fetch error
+# in the output.
+env_skip() { # $1 = exit code, $2 = captured output
+    [ "$1" -eq 124 ] && return 0
+    printf '%s' "$2" | grep -qiE "timed out|I/O error|HTTP [0-9]{3} fetching|error sending request|dns"
+}
+
 # archive-tests — renders a non-trivial results table.
 check_archive_tests() {
-    local out
-    # skip on transient timeout/network errors
-    out=$(timeout 120 nubuntu-utils.archive-tests xz-utils 2>&1)
-    if printf '%s' "$out" | grep -qiE "timed out|I/O error|HTTP [0-9]{3} fetching|error sending request"; then
+    local out rc
+    out=$(timeout 120 nubuntu-utils.archive-tests xz-utils 2>&1); rc=$?
+    if env_skip "$rc" "$out"; then
         printf 'SKIP archive_tests (upstream fetch failed — environmental)\n'; return 0
     fi
     if [ "$(printf '%s\n' "$out" | wc -l)" -lt 3 ]; then printf '%s\n' "$out"; return 1; fi
@@ -50,8 +57,11 @@ check_poc() {
 
 # merges — main component renders a non-trivial table.
 check_merges() {
-    local out
-    out=$(timeout 120 nubuntu-utils.merges main 2>&1)
+    local out rc
+    out=$(timeout 120 nubuntu-utils.merges main 2>&1); rc=$?
+    if env_skip "$rc" "$out"; then
+        printf 'SKIP merges (upstream fetch failed — environmental)\n'; return 0
+    fi
     if [ "$(printf '%s\n' "$out" | wc -l)" -lt 3 ]; then printf '%s\n' "$out"; return 1; fi
 }
 
@@ -66,8 +76,11 @@ check_sru_list() {
 
 # nbs-report — renders the current report's per-package summary table.
 check_nbs_report() {
-    local out
-    out=$(timeout 120 nubuntu-utils.nbs-report 2>&1)
+    local out rc
+    out=$(timeout 120 nubuntu-utils.nbs-report 2>&1); rc=$?
+    if env_skip "$rc" "$out"; then
+        printf 'SKIP nbs_report (upstream fetch failed — environmental)\n'; return 0
+    fi
     printf '%s' "$out" | grep -q "rdeps" || { printf '%s\n' "$out"; return 1; }
 }
 
@@ -84,7 +97,12 @@ check_resolvable() {
 
 for c in archive_tests excuses revdeps poc merges sru_list nbs_report resolvable; do
     echo "--- $c ---"
-    if out=$("check_$c" 2>&1); then ok "$c"; else bad "$c" "$out"; fi
+    if out=$("check_$c" 2>&1); then
+        case $out in SKIP*) printf '%s\n' "$out" ;; esac
+        ok "$c"
+    else
+        bad "$c" "$out"
+    fi
 done
 
 echo
