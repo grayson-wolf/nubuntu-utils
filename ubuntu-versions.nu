@@ -50,6 +50,7 @@ export const ALL_RELEASES = [
     { version: "25.10", name: "questing" }
     { version: "26.04", name: "resolute" }
     { version: "26.10", name: "stonking" }
+    { version: "27.04", name: "tenacious" }
 ]
 
 # Releases currently in standard or ESM support.
