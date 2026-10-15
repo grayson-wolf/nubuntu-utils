@@ -59,17 +59,18 @@ export const SUPPORTED_RELEASES = [
     "jammy"     # 22.04 LTS — standard until 2027
     "noble"     # 24.04 LTS — standard until 2029
     "resolute"  # 26.04 LTS — standard until 2031
-    "stonking"  # 26.10     — current devel
+    "stonking"  # 26.10     — interim
+    "tenacious" # 27.04     — current devel
 ]
 
 # Architectures to request autopkgtests for when a package is Architecture: any/all.
 export const ARCHES = ["amd64" "amd64v3" "arm64" "armhf" "i386" "ppc64el" "riscv64" "s390x"]
 
 # The current development release.
-export const DEVEL_RELEASE = "stonking"
+export const DEVEL_RELEASE = "tenacious"
 
 # The latest stable (non-devel) release.
-export const LATEST_STABLE_RELEASE = "resolute"
+export const LATEST_STABLE_RELEASE = "stonking"
 
 # The latest LTS release.
 export const LATEST_LTS_RELEASE = "resolute"
