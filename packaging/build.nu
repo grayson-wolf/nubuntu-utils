@@ -3,7 +3,7 @@
 use meta.nu [target-release, pkg-upstream-version, pkg-version, pkg-name]
 use launchpad.nu [normalize-ppa-name]
 use ../formatting.nu [osc8-link]
-use ../ubuntu-versions.nu [ARCHES]
+use ../ubuntu-versions.nu [ARCHES, SUPPORTED_RELEASES]
 use tests/log-parsing.nu [request-url]
 
 # Clear Parent Build Directory
@@ -114,7 +114,8 @@ export def ppa-test-urls [
     --proposed (-p)
     --against: string         # Run this package's test suite instead of the upload's own
 ]: nothing -> list<string> {
-    let raw = (ppa tests $ppa_name --show-url | lines)
+    let releases = ($SUPPORTED_RELEASES | str join ",")
+    let raw = (ppa tests $ppa_name --show-url --releases $releases | lines)
     let urls = ($raw
         | where { $in =~ "request.cgi" }
         | each {|line| $line | str trim | split row " " | where { $in starts-with "https://" } | first }
