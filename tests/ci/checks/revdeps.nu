@@ -3,7 +3,7 @@ source-env ../../../env.nu
 use ../../../mod.nu *
 use lib.nu *
 
-let rdeps = (revdeps zlib1g)
+let rdeps = (fetch-or-skip revdeps { revdeps zlib1g })
 if ($rdeps | length) < 100 {
     fail $"revdeps: suspiciously few rdeps for zlib1g (($rdeps | length))"
 }

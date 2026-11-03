@@ -16,7 +16,7 @@ bad()  { printf 'FAIL %s\n%s\n' "$1" "$2"; fail=$((fail+1)); failed_names+=("$1"
 # in the output.
 env_skip() { # $1 = exit code, $2 = captured output
     [ "$1" -eq 124 ] && return 0
-    printf '%s' "$2" | grep -qiE "timed out|I/O error|HTTP [0-9]{3} fetching|error sending request|dns"
+    printf '%s' "$2" | grep -qiE "timed out|I/O error|HTTP [0-9]{3} fetching|error sending request|dns error|could not resolve host|network failure"
 }
 
 # archive-tests — renders a non-trivial results table.
@@ -45,16 +45,22 @@ check_excuses() {
 
 # revdeps — zlib1g has a lot of deps
 check_revdeps() {
-    local out n
-    out=$(timeout 120 nubuntu-utils.revdeps zlib1g 2>&1)
+    local out rc n
+    out=$(timeout 120 nubuntu-utils.revdeps zlib1g 2>&1); rc=$?
+    if env_skip "$rc" "$out"; then
+        printf 'SKIP revdeps (upstream fetch failed — environmental)\n'; return 0
+    fi
     n=$(printf '%s\n' "$out" | grep -c .)
     if [ "$n" -lt 100 ]; then printf '%s\n' "$out"; return 1; fi
 }
 
 # poc — xz-utils maps to a non-empty team list.
 check_poc() {
-    local out
-    out=$(timeout 60 nubuntu-utils.poc xz-utils 2>&1)
+    local out rc
+    out=$(timeout 60 nubuntu-utils.poc xz-utils 2>&1); rc=$?
+    if env_skip "$rc" "$out"; then
+        printf 'SKIP poc (upstream fetch failed — environmental)\n'; return 0
+    fi
     if [ -z "$(printf '%s' "$out" | tr -d '[:space:]')" ]; then printf '%s\n' "$out"; return 1; fi
 }
 
@@ -70,9 +76,14 @@ check_merges() {
 
 # sru-list — the report renders a table with a package column (or an empty table).
 check_sru_list() {
-    local out
-    out=$(timeout 120 nubuntu-utils.sru-list 2>&1)
-    if printf '%s' "$out" | grep -qiE "No SRU data|Unknown Ubuntu series|error"; then
+    local out rc
+    out=$(timeout 120 nubuntu-utils.sru-list 2>&1); rc=$?
+    if env_skip "$rc" "$out"; then
+        printf 'SKIP sru_list (upstream fetch failed — environmental)\n'; return 0
+    fi
+    # Anchored: every failure path renders a line starting with "Error:" —
+    # a bare "error" grep would false-fail on package names in the report.
+    if printf '%s' "$out" | grep -q "^Error:"; then
         printf '%s\n' "$out"; return 1
     fi
 }
@@ -90,8 +101,11 @@ check_nbs_report() {
 # resolvable — scans archive indexes with the snap-staged ripgrep; must not
 # report `rg` missing, and must emit the level column.
 check_resolvable() {
-    local out
-    out=$(timeout 180 nubuntu-utils.resolvable xz-utils 2>&1)
+    local out rc
+    out=$(timeout 180 nubuntu-utils.resolvable xz-utils 2>&1); rc=$?
+    if env_skip "$rc" "$out"; then
+        printf 'SKIP resolvable (upstream fetch failed — environmental)\n'; return 0
+    fi
     if printf '%s' "$out" | grep -q "Command .rg. not found"; then
         printf 'rg not reachable inside the snap\n%s\n' "$out"; return 1
     fi

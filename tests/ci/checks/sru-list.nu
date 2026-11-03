@@ -3,7 +3,7 @@ source-env ../../../env.nu
 use ../../../mod.nu *
 use lib.nu *
 
-let rows = (sru-list)
+let rows = (fetch-or-skip sru-list { sru-list })
 if ($rows | is-empty) {
     print "sru-list OK: series has no pending SRUs"
     return

@@ -3,7 +3,7 @@ source-env ../../../env.nu
 use ../../../mod.nu *
 use lib.nu *
 
-let rows = (madison xz-utils --raw)
+let rows = (fetch-or-skip madison { madison xz-utils --raw })
 if ($rows | is-empty) { fail "madison: no rows for xz-utils" }
 let cols = ($rows | get 0 | columns)
 for c in [package version suite component arches] {

@@ -16,7 +16,7 @@ export def fail [msg: string] {
 # failure (connection reset/refused, timeout, HTTP blip) rather than a code
 # regression.
 export def is-environmental [err: string]: nothing -> bool {
-    $err =~ '(?i)timed out|I/O error|error sending request|HTTP \d{3} (fetching|posting)|rate-limited|connection (reset|refused)|dns'
+    $err =~ '(?i)timed out|I/O error|error sending request|HTTP \d{3} (fetching|posting)|rate-limited|connection (reset|refused)|dns error|could not resolve host|network failure'
 }
 
 # Run a live-data fetch, SKIPping the whole check (exit 0) when the upstream

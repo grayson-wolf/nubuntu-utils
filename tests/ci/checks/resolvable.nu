@@ -4,12 +4,12 @@ use ../../../mod.nu *
 use lib.nu *
 
 # A package with no library build-deps returns an empty table, not an error.
-let empty = (resolvable hello --raw)
+let empty = (fetch-or-skip resolvable { resolvable hello --raw })
 if ($empty | is-not-empty) { fail "resolvable: hello should have no library build-deps" }
 
 # A real library-transition source package yields rows in the valid taxonomy.
 # (Don't assert a specific status/level — it tracks live -proposed state.)
-let rows = (resolvable haskell-pandoc-types --raw)
+let rows = (fetch-or-skip resolvable { resolvable haskell-pandoc-types --raw })
 if ($rows | is-empty) { fail "resolvable: no rows for haskell-pandoc-types" }
 let cols = ($rows | get 0 | columns)
 for c in [name status version source level] {
