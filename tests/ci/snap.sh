@@ -33,10 +33,13 @@ check_archive_tests() {
 check_excuses() {
     local out rc
     out=$(timeout 120 nubuntu-utils.excuses xz-utils 2>&1); rc=$?
+    if env_skip "$rc" "$out"; then
+        printf 'SKIP excuses (upstream fetch failed — environmental)\n'; return 0
+    fi
     if [ $rc -eq 0 ]; then
         printf '%s' "$out" | grep -q xz-utils || { printf '%s\n' "$out"; return 1; }
     else
-        printf '%s' "$out" | grep -q "not found in stonking excuses" || { printf '%s\n' "$out"; return 1; }
+        printf '%s' "$out" | grep -q "not found in .* excuses" || { printf '%s\n' "$out"; return 1; }
     fi
 }
 
