@@ -30,7 +30,7 @@ export def withgit-do [
 # Wraps `git push $LAUNCHPAD_NAME` with optional --force and merge tag pushing.
 # Passes through any extra refspecs (e.g., branch names, tags).
 export def --wrapped lppush [
-    --force (-f)      # Force-push (maps to --force-with-lease for safety)
+    --force (-f)      # Force-push (refs via --force-with-lease; merge tags via --force)
     --merge-tags (-m) # Also push merge tags (reconstruct/*, split/*, logical/*, old/*, new/*)
     ...refs: string   # Optional refspecs to push (e.g., branch, tag)
 ]: nothing -> nothing {
@@ -61,7 +61,14 @@ export def --wrapped lppush [
                 | where { not ($in | str trim | is-empty) }
         )
         for tag in $tags {
-            git push $remote $tag
+            print $"Pushing ($tag)"
+            if $force {
+                # Tags have no remote-tracking ref, so --force-with-lease
+                # rejects them with "stale info" — real --force is required.
+                git push $remote --force $tag
+            } else {
+                git push $remote $tag
+            }
         }
     }
 }
