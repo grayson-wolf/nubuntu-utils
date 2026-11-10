@@ -50,7 +50,7 @@ export def --wrapped build [
     --no-fetch (-f) # Don't attempt fetch upstream tarballs
     --to (-t): string # Upload to this PPA name instead of auto-generating one
     --against: string@pkg-completions # Run this package's test suite against the upload (autopkgtest submission)
-    --fast (-f) # don't attempt to make the PPA, don't wait for tests
+    --fast (-a) # don't attempt to make the PPA, don't wait for tests
     ...debuild_flags: string # Extra flags to pass to debuild
 ]: nothing -> nothing {
     if $deps and $no_deps {
