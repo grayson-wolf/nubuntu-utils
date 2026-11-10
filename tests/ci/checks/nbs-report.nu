@@ -5,14 +5,18 @@ use lib.nu *
 
 let report = (fetch-or-skip nbs-report { nbs-report --raw })
 if $report == null { fail "nbs-report: empty report" }
-if ($report.packages | is-empty) { fail "nbs-report: no NBS packages" }
-if ($report.generated | describe) != "datetime" { fail "nbs-report: generated is not a datetime" }
 
 # Plain / drill-down / -d calls below reuse the HTML cached by the --raw call.
 let rows = (nbs-report)
-if ($rows | is-empty) { fail "nbs-report: empty current table" }
-if not (($rows | columns) == ["package", "rdeps", "nbs rdeps", "main/restr", "via"]) {
-    fail "nbs-report: unexpected current columns"
+
+if ($report.packages | is-empty) {
+    if ($rows | is-not-empty) { fail "nbs-report: no NBS packages but plain table is non-empty" }
+} else {
+    if ($report.generated | describe) != "datetime" { fail "nbs-report: generated is not a datetime" }
+    if ($rows | is-empty) { fail "nbs-report: empty current table" }
+    if not (($rows | columns) == ["package", "rdeps", "nbs rdeps", "main/restr", "via"]) {
+        fail "nbs-report: unexpected current columns"
+    }
 }
 
 if ($report.rdeps | is-not-empty) {

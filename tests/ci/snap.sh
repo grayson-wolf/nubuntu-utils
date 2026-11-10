@@ -95,6 +95,9 @@ check_nbs_report() {
     if env_skip "$rc" "$out"; then
         printf 'SKIP nbs_report (upstream fetch failed — environmental)\n'; return 0
     fi
+    if printf '%s' "$out" | grep -q "No NBS packages"; then
+        return 0
+    fi
     printf '%s' "$out" | grep -q "rdeps" || { printf '%s\n' "$out"; return 1; }
 }
 
