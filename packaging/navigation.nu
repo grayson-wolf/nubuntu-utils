@@ -5,12 +5,9 @@ use ../formatting.nu [with-spinner]
 use cache.nu *
 use build.nu [tarme]
 use source-packages.nu [is-known-source-package]
+use http.nu [static-reports-get]
 
-# Sources for the package-team mapping
-const TEAM_MAPPING_URLS = [
-    "https://static-reports.ubuntu.com/package-team-mapping.json"
-    "https://static-reports.staging.ubuntu.com/package-team-mapping.json"
-]
+const TEAM_MAPPING_PATH = "package-team-mapping.json"
 
 # Make a directory and immediately enter it.
 def --env mkcd [path: string]: nothing -> nothing {
@@ -59,15 +56,7 @@ def is-team-mapping [data]: nothing -> bool {
 }
 
 def fetch-team-mapping []: nothing -> any {
-    let attempts = ($TEAM_MAPPING_URLS | each {|url|
-        try { { data: (http get $url), err: null } } catch {|e| { data: null, err: $e } }
-    })
-    for a in $attempts {
-        if (is-team-mapping $a.data) { return $a.data }
-    }
-    let failed = ($attempts | where {|a| $a.err != null })
-    if not ($failed | is-empty) { error make ($failed | get 0.err) }
-    null
+    static-reports-get $TEAM_MAPPING_PATH {|d| if (is-team-mapping $d) { $d } else { null } }
 }
 
 # Package Ownership Check

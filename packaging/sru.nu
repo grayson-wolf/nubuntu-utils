@@ -3,8 +3,9 @@
 use ../completions.nu [release-completions]
 use ../formatting.nu [osc8-link, lp-source-link, days-to-duration, with-spinner, version-delta]
 use ../ubuntu-versions.nu [LATEST_STABLE_RELEASE, ALL_RELEASES]
+use http.nu [static-reports-get]
 
-const SRU_REPORT_URL = "https://static-reports.ubuntu.com/pending-sru/sru_report.yaml"
+const SRU_REPORT_PATH = "pending-sru/sru_report.yaml"
 
 # Format a bug ID with color based on its class, as a clickable hyperlink.
 def format-bug [bug: record]: nothing -> string {
@@ -46,10 +47,26 @@ export def sru-list [
     $rows
 }
 
+# Normalize an SRU report response to the series -> entries record, or null
+# when the payload isn't the report
+def parse-sru-report [data]: nothing -> any {
+    let v = (if ($data | describe) == "string" {
+        try { $data | from yaml } catch { null }
+    } else {
+        $data
+    })
+    if ($v | describe | str starts-with "record") { $v } else { null }
+}
+
 # Fetch the SRU report and return the entries for the requested series
 # (or all series, flattened with a `series` field) for further processing.
 export def fetch-sru-entries [series: string, all_series: bool]: nothing -> any {
-    let data = with-spinner "Fetching SRU report..." { http get $SRU_REPORT_URL }
+    let data = with-spinner "Fetching SRU report..." {
+        static-reports-get $SRU_REPORT_PATH {|d| parse-sru-report $d }
+    }
+    if $data == null {
+        error make { msg: "No valid SRU report available: tried static-reports.ubuntu.com and static-reports.staging.ubuntu.com" }
+    }
     if $all_series {
         $data | transpose series items | each {|row|
             $row.items | each {|item| $item | insert series $row.series }

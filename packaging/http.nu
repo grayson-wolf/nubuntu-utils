@@ -32,6 +32,35 @@ export def http-get [
     }
 }
 
+# Static-reports roots, in preference order
+const STATIC_REPORTS_BASES = [
+    "https://static-reports.ubuntu.com"
+    "https://static-reports.staging.ubuntu.com"
+]
+
+# GET a static-reports page, returning from the first source that accept
+# returns non-null. If all sources fail, errors with the first error encountered.
+export def static-reports-get [
+    path: string            # artifact path under the static-reports root
+    accept: closure         # body -> value to use, or null to reject
+]: nothing -> any {
+    let attempts = ($STATIC_REPORTS_BASES | each {|base|
+        let url = $"($base)/($path)"
+        try {
+            { err: null, body: (http-get $url) }
+        } catch {|e| { err: $e, body: null } }
+    })
+    for a in $attempts {
+        if $a.err == null {
+            let v = (do $accept $a.body)
+            if $v != null { return $v }
+        }
+    }
+    let failed = ($attempts | where {|a| $a.err != null })
+    if not ($failed | is-empty) { error make ($failed | get 0.err) }
+    null
+}
+
 # Wrap http post with the same error policy as http-get.
 # Returns the body on 2XX, null on 404, and explicitly errors on everything else.
 # --headers: extra request headers (e.g. {PRIVATE-TOKEN: $token}).

@@ -1,7 +1,13 @@
 # nbs-report — current report parses to structured rows; -H gives history.
 source-env ../../../env.nu
 use ../../../mod.nu *
+use ../../../packaging/cache.nu [cache-file-flat, cache-save]
 use lib.nu *
+
+# Seed both caches with junk and make sure
+# nbs-report ignores them and refetches.
+cache-save (cache-file-flat "nbs.html") "Default page for the haproxy-operator charm"
+cache-save (cache-file-flat "nbs.csv") "Default page for the haproxy-operator charm"
 
 let report = (fetch-or-skip nbs-report { nbs-report --raw })
 if $report == null { fail "nbs-report: empty report" }

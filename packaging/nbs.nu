@@ -2,19 +2,32 @@
 use ../formatting.nu [osc8-link, lp-source-url, with-spinner]
 use ../ubuntu-versions.nu [DEVEL_RELEASE]
 use cache.nu [cache-file-flat, cache-load, cache-save]
+use http.nu [static-reports-get]
 
 const NBS_BASE = "https://static-reports.ubuntu.com/nbs"
-const NBS_PAGE = $"($NBS_BASE)/nbs.html"
-const NBS_CSV = $"($NBS_BASE)/nbs.csv"
+const NBS_PAGE = $"($NBS_BASE)/nbs.html"   # canonical page URL, for links
+const NBS_CSV = $"($NBS_BASE)/nbs.csv"     # canonical CSV URL, for messages
+const NBS_PAGE_PATH = "nbs/nbs.html"
+const NBS_CSV_PATH = "nbs/nbs.csv"
 const NBS_TTL = 60min
 const MS_PER_DAY = 86_400_000
 
+# True when the value looks like the nbs.csv time series
+def is-nbs-samples [rows]: nothing -> bool {
+    let cols = (try { $rows | columns } catch { [] })
+    ["time" "removable" "total"] | all {|c| $c in $cols}
+}
+
 # Fetch the current report HTML (cached NBS_TTL, flat singleton file).
+# Payload and cache are validated by the page's "Generated at" marker — the
+# CDN's default page must neither be trusted nor cached.
 def fetch-report []: nothing -> string {
     let path = (cache-file-flat "nbs.html")
     let cached = (cache-load $path $NBS_TTL)
-    if $cached != null { return ($cached | into string) }
-    let fresh = (http get $NBS_PAGE)
+    if ($cached | default "" | into string | str contains "Generated at") { return ($cached | into string) }
+    let fresh = (static-reports-get $NBS_PAGE_PATH {|d|
+        if ($d | describe) == "string" and ($d | str contains "Generated at") { $d } else { null }
+    })
     if ($fresh | is-not-empty) { cache-save $path $fresh }
     $fresh
 }
@@ -23,13 +36,26 @@ def fetch-report []: nothing -> string {
 def fetch-nbs []: nothing -> table {
     let path = (cache-file-flat "nbs.csv")
     let cached = (cache-load $path $NBS_TTL)
-    let rows = if $cached != null {
+    let rows = if (is-nbs-samples $cached) {
         $cached
     } else {
-        let fresh = (http get --raw $NBS_CSV | decode utf-8 | from csv)
+        let fresh = (static-reports-get $NBS_CSV_PATH {|d|
+            # text/csv bodies may arrive already parsed; raw text and binary
+            # bodies are parsed here.
+            let rows = (if (is-nbs-samples $d) {
+                $d
+            } else if ($d | describe) == "string" {
+                try { $d | from csv } catch { null }
+            } else {
+                let text = (try { $d | decode utf-8 } catch { null })
+                try { $text | from csv } catch { null }
+            })
+            if (is-nbs-samples $rows) { $rows } else { null }
+        })
         if ($fresh | is-not-empty) { cache-save $path $fresh }
         $fresh
     }
+    if ($rows == null) { return [] }
     $rows | into int time removable total | sort-by time
 }
 
