@@ -6,6 +6,12 @@ use cache.nu *
 use build.nu [tarme]
 use source-packages.nu [is-known-source-package]
 
+# Sources for the package-team mapping
+const TEAM_MAPPING_URLS = [
+    "https://static-reports.ubuntu.com/package-team-mapping.json"
+    "https://static-reports.staging.ubuntu.com/package-team-mapping.json"
+]
+
 # Make a directory and immediately enter it.
 def --env mkcd [path: string]: nothing -> nothing {
     mkdir $path
@@ -47,6 +53,23 @@ export def --env pkg [
     }
 }
 
+# True when the mapping has the expected shape
+def is-team-mapping [data]: nothing -> bool {
+    ($data | describe | str starts-with "record")
+}
+
+def fetch-team-mapping []: nothing -> any {
+    let attempts = ($TEAM_MAPPING_URLS | each {|url|
+        try { { data: (http get $url), err: null } } catch {|e| { data: null, err: $e } }
+    })
+    for a in $attempts {
+        if (is-team-mapping $a.data) { return $a.data }
+    }
+    let failed = ($attempts | where {|a| $a.err != null })
+    if not ($failed | is-empty) { error make ($failed | get 0.err) }
+    null
+}
+
 # Package Ownership Check
 # Check who a package belongs to, returning all owners as a list.
 # Caches the team mapping JSON for one day to avoid repeated downloads.
@@ -55,12 +78,14 @@ export def poc [
 ]: nothing -> list<string> {
   let cache_file = (cache-file-flat "package-team-mapping.nuon")
   let cached = (cache-load $cache_file 1day)
-  let data = if $cached != null { $cached } else {
-      let json = with-spinner "Fetching package-team mapping..." {
-          http get https://static-reports.ubuntu.com/package-team-mapping.json
-      }
-      cache-save $cache_file $json
+  let data = if (is-team-mapping $cached) { $cached } else {
+      let json = with-spinner "Fetching package-team mapping..." { fetch-team-mapping }
+      if (is-team-mapping $json) { cache-save $cache_file $json }
       $json
+  }
+
+  if not (is-team-mapping $data) {
+    error make { msg: "No valid package-team mapping available: tried static-reports.ubuntu.com and static-reports.staging.ubuntu.com" }
   }
 
   $data | columns | where {|k| $package in ($data | get $k) }
