@@ -74,9 +74,12 @@ export def "my excuses" [
     let watchlist = if ($user | is-empty) { load-watchlist } else { [] }
 
     # Syncs have creator as the Debian uploader and no signer, so they aren't caught
-    # fall back to the sponsorship miner
+    # by publication classification; fall back to the sponsorship miner. Only rows
+    # where the miner recorded the sponsoree's email (from the changes file)
+    # count
     let sponsored_pairs = (with-spinner $"Fetching sponsorships for ($me)..." {
-        let rows = (fetch-sponsorships (lp-display-name $me))
+        let rows = (fetch-sponsorships (lp-display-name $me)
+            | where {|r| ($r | get -o sponsoree_email | default "") != "" })
         if ($rows | is-empty) { [] } else { $rows | select package version }
     })
 

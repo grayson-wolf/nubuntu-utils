@@ -21,9 +21,19 @@ def lp-user-from-link [link: any]: nothing -> any {
     $parts | last
 }
 
+# The LP getPublishedSources `version` filter matches numerically-equal
+# versions too (a "1.20" query returns the "1.2" publication), so a
+# returned record must be verified against the requested pair before use.
+def pub-is-exact [pub: record, package: string, version: string]: nothing -> bool {
+    let name = ($pub | get -o source_package_name | default "")
+    let ver = ($pub | get -o source_package_version | default "")
+    ($name == $package) and ($ver == $version)
+}
+
 # Fetch the LP source publication record for an exact (package, version) pair
-# in the Ubuntu primary archive. Returns the first matching entry record, or
-# null if no publication exists. Disk-cached forever (publications are immutable).
+# in the Ubuntu primary archive. Returns the first exactly-matching entry
+# record, or null if no publication exists. Disk-cached forever (publications
+# are immutable).
 export def lp-source-publication [
     package: string
     version: string
@@ -34,7 +44,11 @@ export def lp-source-publication [
         let cached = (try { open $cache_file } catch { null })
         # Cached "null" sentinel means we already confirmed nothing exists.
         if ($cached | describe) == "string" and $cached == "null" { return null }
-        if $cached != null { return $cached }
+        if $cached != null {
+            if (pub-is-exact $cached $package $version) { return $cached }
+            # Wrong-version record from LP's numeric matching — refetch and
+            # re-cache below rather than attribute another version's upload.
+        }
     }
     let url = $"($LP_API)/ubuntu/+archive/primary"
     let raw = (curl -sG $url
@@ -54,7 +68,8 @@ export def lp-source-publication [
         return null
     }
     let entries = ($parsed | get -o entries | default [])
-    let first = if ($entries | is-empty) { null } else { $entries | first }
+    let exact = ($entries | where {|e| pub-is-exact $e $package $version })
+    let first = if ($exact | is-empty) { null } else { $exact | first }
     if ($first | is-empty) {
         cache-save $cache_file "null"
         return null
